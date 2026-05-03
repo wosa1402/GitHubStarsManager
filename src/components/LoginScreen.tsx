@@ -1,18 +1,28 @@
 import React, { useState } from 'react';
-import { Github, Key, ArrowRight, AlertCircle, Moon, Sun } from 'lucide-react';
+import { Github, Key, ArrowRight, AlertCircle, Moon, Sun, User } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { GitHubApiService } from '../services/githubApi';
 import { safeReadText } from '../utils/clipboardUtils';
 
 export const LoginScreen: React.FC = () => {
+  const [username, setUsername] = useState('');
   const [token, setToken] = useState('');
+  const [useTokenUserStars, setUseTokenUserStars] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const { setUser, setGitHubToken, repositories, lastSync, language, setLanguage, theme, setTheme } = useAppStore();
+  const { setUser, setGitHubToken, setStarredUsername, repositories, lastSync, language, setLanguage, theme, setTheme } = useAppStore();
 
   const handleConnect = async () => {
-    if (!token.trim()) {
-      setError(language === 'zh' ? '请输入有效的GitHub token' : 'Please enter a valid GitHub token');
+    const normalizedUsername = username.trim().replace(/^@/, '');
+    const trimmedToken = token.trim();
+
+    if (!normalizedUsername && !useTokenUserStars) {
+      setError(language === 'zh' ? '请输入要导入 Stars 的 GitHub 用户名' : 'Please enter the GitHub username whose stars should be imported');
+      return;
+    }
+
+    if (useTokenUserStars && !trimmedToken) {
+      setError(language === 'zh' ? '请先填写 GitHub token' : 'Please enter a GitHub token first');
       return;
     }
 
@@ -20,28 +30,41 @@ export const LoginScreen: React.FC = () => {
     setError('');
 
     try {
-      // Test the token by fetching user info
-      const githubApi = new GitHubApiService(token);
-      const user = await githubApi.getCurrentUser();
-      
-      // If successful, save the token and user info
-      setGitHubToken(token);
-      setUser(user);
-      
-      console.log('Successfully authenticated user:', user);
+      const githubApi = new GitHubApiService(trimmedToken || null);
+      const tokenUser = trimmedToken ? await githubApi.getCurrentUser() : null;
+      const importUser = useTokenUserStars
+        ? tokenUser
+        : await githubApi.getUser(normalizedUsername);
+
+      if (!importUser) {
+        setError(language === 'zh' ? '无法确定要导入的 GitHub 用户' : 'Unable to determine the GitHub user to import');
+        return;
+      }
+
+      setGitHubToken(trimmedToken || null);
+      setStarredUsername(importUser.login);
+      setUser(importUser);
+
+      console.log('Successfully selected starred user:', importUser);
     } catch (error) {
-      console.error('Authentication failed:', error);
+      console.error('GitHub connection failed:', error);
       setError(
         error instanceof Error 
           ? error.message 
-          : (language === 'zh' ? '认证失败，请检查您的token。' : 'Failed to authenticate. Please check your token.')
+          : (language === 'zh' ? '连接失败，请检查用户名或 token。' : 'Failed to connect. Please check the username or token.')
       );
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleKeyPress = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleUsernameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !isLoading) {
+      handleConnect();
+    }
+  };
+
+  const handleTokenKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !isLoading) {
       handleConnect();
       return;
@@ -51,7 +74,11 @@ export const LoginScreen: React.FC = () => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v' && !isLoading) {
       const result = await safeReadText();
       if (result.success && result.text) {
-        setToken(result.text.trim());
+        const pasted = result.text.trim();
+        setToken(pasted);
+        if (!pasted) {
+          setUseTokenUserStars(false);
+        }
         setError('');
       } else {
         // 读取剪贴板失败，让浏览器/系统默认行为继续兜底
@@ -117,10 +144,10 @@ export const LoginScreen: React.FC = () => {
           <div className="text-center mb-6">
             <Github className="w-10 h-10 text-gray-900 dark:text-text-secondary mx-auto mb-3" />
             <h2 className="text-xl font-semibold text-gray-900 dark:text-text-primary mb-2">
-              {t('连接GitHub', 'Connect with GitHub')}
+              {t('导入 GitHub Stars', 'Import GitHub Stars')}
             </h2>
             <p className="text-gray-700 dark:text-text-tertiary text-sm">
-              {t('输入您的GitHub个人访问令牌以开始使用', 'Enter your GitHub personal access token to get started')}
+              {t('输入用户名，也可以附加 token 提高 API 限额', 'Enter a username, optionally with a token for higher API limits')}
             </p>
           </div>
 
@@ -142,7 +169,31 @@ export const LoginScreen: React.FC = () => {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-900 dark:text-text-secondary mb-2">
-                GitHub Personal Access Token
+                {t('导入 Stars 的用户名', 'Username to import stars from')}
+              </label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-text-quaternary w-5 h-5" />
+                <input
+                  type="text"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  placeholder="octocat"
+                  value={username}
+                  onChange={(e) => {
+                    setUsername(e.target.value);
+                    setError('');
+                  }}
+                  onKeyDown={handleUsernameKeyDown}
+                  disabled={isLoading || useTokenUserStars}
+                  className="w-full pl-10 pr-4 py-3 border border-black/[0.06] dark:border-white/[0.04] rounded-lg focus:ring-2 focus:ring-brand-violet focus:border-transparent bg-white dark:bg-white/[0.04] text-gray-900 dark:text-text-primary disabled:bg-light-bg dark:disabled:bg-gray-600 disabled:text-gray-500 dark:disabled:text-gray-400"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-900 dark:text-text-secondary mb-2">
+                GitHub Personal Access Token {t('（可选）', '(optional)')}
               </label>
               <div className="relative">
                 <Key className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-text-quaternary w-5 h-5" />
@@ -151,15 +202,35 @@ export const LoginScreen: React.FC = () => {
                   placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
                   value={token}
                   onChange={(e) => {
-                    setToken(e.target.value);
-                    setError(''); // Clear error when user types
+                    const nextToken = e.target.value;
+                    setToken(nextToken);
+                    if (!nextToken.trim()) {
+                      setUseTokenUserStars(false);
+                    }
+                    setError('');
                   }}
-                  onKeyDown={handleKeyPress}
+                  onKeyDown={handleTokenKeyDown}
                   disabled={isLoading}
                   className="w-full pl-10 pr-4 py-3 border border-black/[0.06] dark:border-white/[0.04] rounded-lg focus:ring-2 focus:ring-brand-violet focus:border-transparent bg-white dark:bg-white/[0.04] text-gray-900 dark:text-text-primary disabled:bg-light-bg dark:disabled:bg-gray-600 disabled:text-gray-500 dark:disabled:text-gray-400"
                 />
               </div>
             </div>
+
+            <label className={`flex items-center gap-3 p-3 rounded-lg border border-black/[0.06] dark:border-white/[0.04] bg-light-bg dark:bg-white/[0.02] ${!token.trim() ? 'opacity-60' : ''}`}>
+              <input
+                type="checkbox"
+                checked={useTokenUserStars}
+                disabled={isLoading || !token.trim()}
+                onChange={(e) => {
+                  setUseTokenUserStars(e.target.checked);
+                  setError('');
+                }}
+                className="w-4 h-4 rounded border-gray-300 text-brand-indigo focus:ring-brand-violet"
+              />
+              <span className="text-sm text-gray-700 dark:text-text-secondary">
+                {t('导入这个 token 对应账号的 Stars', 'Import stars from this token user')}
+              </span>
+            </label>
 
             {error && (
               <div className="flex items-center space-x-2 p-3 bg-gray-100 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.04] dark:border-black/[0.06] dark:border-white/[0.04] rounded-lg">
@@ -170,7 +241,7 @@ export const LoginScreen: React.FC = () => {
 
             <button 
               onClick={handleConnect}
-              disabled={isLoading || !token.trim()}
+              disabled={isLoading || (!username.trim() && !useTokenUserStars)}
               className="w-full flex items-center justify-center space-x-2 px-6 py-3 bg-brand-indigo hover:bg-gray-100 dark:bg-white/[0.04] disabled:bg-gray-400 dark:disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors"
             >
               {isLoading ? (
@@ -189,7 +260,7 @@ export const LoginScreen: React.FC = () => {
 
           <div className="mt-6 p-4 bg-light-bg dark:bg-white/[0.02] rounded-lg">
             <h3 className="font-medium text-gray-900 dark:text-text-primary mb-2 text-sm">
-              {t('如何创建GitHub token:', 'How to create a GitHub token:')}
+              {t('如何创建可选 GitHub token:', 'How to create an optional GitHub token:')}
             </h3>
             <ol className="text-xs text-gray-700 dark:text-text-tertiary space-y-1">
               <li>1. {t('访问GitHub Settings → Developer settings → Personal access tokens', 'Go to GitHub Settings → Developer settings → Personal access tokens')}</li>

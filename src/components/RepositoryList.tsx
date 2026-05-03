@@ -269,11 +269,6 @@ export const RepositoryList: React.FC<RepositoryListProps> = ({
   }, []);
 
   const handleAIAnalyze = async (analyzeUnanalyzedOnly: boolean = false, analyzeFailedOnly: boolean = false) => {
-    if (!githubToken) {
-      toast(language === 'zh' ? 'GitHub token 未找到，请重新登录。' : 'GitHub token not found. Please login again.', 'error');
-      return;
-    }
-
     const activeConfig = aiConfigs.find(config => config.id === activeAIConfig);
     if (!activeConfig) {
       toast(language === 'zh' ? '请先在设置中配置AI服务。' : 'Please configure AI service in settings first.', 'error');
@@ -655,11 +650,6 @@ export const RepositoryList: React.FC<RepositoryListProps> = ({
         }
 
         case 'ai-summary': {
-          if (!githubToken) {
-            toast(language === 'zh' ? 'GitHub token 未找到，请重新登录。' : 'GitHub token not found. Please login again.', 'error');
-            return;
-          }
-
           const confirmMessage = language === 'zh'
             ? `将对 ${repos.length} 个仓库进行 AI 分析，这可能需要几分钟时间。是否继续？`
             : `Will analyze ${repos.length} repositories with AI. This may take several minutes. Continue?`;

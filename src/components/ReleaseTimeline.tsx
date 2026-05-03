@@ -298,11 +298,6 @@ export const ReleaseTimeline: React.FC = () => {
   };
 
   const handleRefresh = async () => {
-    if (!githubToken) {
-      toast(language === 'zh' ? 'GitHub token 未找到，请重新登录。' : 'GitHub token not found. Please login again.', 'error');
-      return;
-    }
-
     setReleaseIsRefreshing(true);
     try {
       const githubApi = new GitHubApiService(githubToken);

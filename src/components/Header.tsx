@@ -12,6 +12,7 @@ export const Header: React.FC = () => {
     isLoading,
     lastSync,
     githubToken,
+    starredUsername,
     repositories,
     setTheme,
     setCurrentView,
@@ -65,8 +66,8 @@ export const Header: React.FC = () => {
   }, []);
 
   const handleSync = async () => {
-    if (!githubToken) {
-      toast(t('GitHub token 未找到，请重新登录。', 'GitHub token not found. Please login again.'), 'error');
+    if (!starredUsername && !githubToken) {
+      toast(t('GitHub 用户名未找到，请重新登录。', 'GitHub username not found. Please login again.'), 'error');
       return;
     }
 
@@ -74,7 +75,7 @@ export const Header: React.FC = () => {
     try {
       const githubApi = new GitHubApiService(githubToken);
 
-      const newRepositories = await githubApi.getAllStarredRepositories();
+      const newRepositories = await githubApi.getAllStarredRepositories(starredUsername);
 
       const existingRepoMap = new Map(repositories.map(repo => [repo.id, repo]));
       const mergedRepositories = newRepositories.map(newRepo => {
@@ -110,9 +111,9 @@ export const Header: React.FC = () => {
       // 显示同步结果
       const newRepoCount = newRepositories.length - repositories.length;
       if (newRepoCount > 0) {
-        toast(t(`同步完成！发现 ${newRepoCount} 个新仓库。`, `Sync completed! Found ${newRepoCount} new repositories.`), 'success');
+        toast(t(`同步完成！从 @${starredUsername || user?.login} 发现 ${newRepoCount} 个新仓库。`, `Sync completed! Found ${newRepoCount} new repositories from @${starredUsername || user?.login}.`), 'success');
       } else {
-        toast(t('同步完成！所有仓库都是最新的。', 'Sync completed! All repositories are up to date.'), 'info');
+        toast(t(`同步完成！@${starredUsername || user?.login} 的仓库都是最新的。`, `Sync completed! @${starredUsername || user?.login}'s repositories are up to date.`), 'info');
       }
     } catch (error) {
       console.error('Sync failed:', error);

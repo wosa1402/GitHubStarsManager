@@ -537,11 +537,6 @@ export const DiscoveryView: React.FC = React.memo(() => {
 
 
   const refreshChannel = useCallback(async (channelId: DiscoveryChannelId, page: number = 1, append: boolean = false) => {
-    if (!githubToken) {
-      toast(t('GitHub Token 未找到，请重新登录。', 'GitHub token not found. Please login again.'), 'error');
-      return;
-    }
-
     if (append) {
       setDiscoveryLoadingMore(channelId, true);
       setDiscoveryLoadMoreError(channelId, null);
@@ -734,8 +729,6 @@ export const DiscoveryView: React.FC = React.memo(() => {
   }, [handleScroll]);
 
   const handleAnalyzePage = useCallback(async () => {
-    if (!githubToken) return;
-
     const activeConfig = aiConfigs.find(c => c.id === activeAIConfig);
     if (!activeConfig) {
       toast(t('请先在设置中配置AI服务。', 'Please configure AI service in settings first.'), 'error');

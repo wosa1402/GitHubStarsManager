@@ -201,11 +201,6 @@ export const SubscriptionRepoCard: React.FC<SubscriptionRepoCardProps> = ({ repo
   const handleAnalyze = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
 
-    if (!githubToken) {
-      toast(t('GitHub Token 未找到，请重新登录。', 'GitHub token not found. Please login again.'), 'error');
-      return;
-    }
-
     const activeConfig = aiConfigs.find(c => c.id === activeAIConfig);
     if (!activeConfig) {
       toast(t('请先在设置中配置AI服务。', 'Please configure AI service in settings first.'), 'error');
@@ -329,7 +324,7 @@ export const SubscriptionRepoCard: React.FC<SubscriptionRepoCardProps> = ({ repo
               {/* AI Analyze button */}
               <button
                 onClick={handleAnalyze}
-                disabled={!githubToken || isAnalyzing}
+                disabled={isAnalyzing}
                 className={`flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                   isAnalyzed
                     ? 'bg-gray-100 text-gray-700 dark:bg-white/[0.04] dark:text-text-secondary hover:bg-gray-200 hover:text-gray-900 dark:hover:bg-white/[0.08] dark:hover:text-text-primary'

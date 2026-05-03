@@ -16,7 +16,7 @@ export interface AIAnalysisResult {
 
 export interface AnalyzeRepositoryOptions {
   repository: Repository | DiscoveryRepo;
-  githubToken: string;
+  githubToken?: string | null;
   aiConfig: AIConfig;
   language: string;
   categories: Category[];

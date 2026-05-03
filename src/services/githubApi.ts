@@ -46,12 +46,20 @@ export interface MultipleReleasesResult {
 
 
 export class GitHubApiService {
-  private token: string;
+  private token: string | null;
   private rateLimitRemaining: number | null = null;
   private rateLimitReset: number | null = null;
 
-  constructor(token: string) {
-    this.token = token;
+  constructor(token?: string | null) {
+    const trimmedToken = token?.trim();
+    this.token = trimmedToken || null;
+  }
+
+  private requireToken(): string {
+    if (!this.token) {
+      throw new Error('GitHub token required for this operation');
+    }
+    return this.token;
   }
 
   private async makeRequest<T>(endpoint: string, options: RequestInit = {}, signal?: AbortSignal): Promise<T> {
@@ -80,15 +88,25 @@ export class GitHubApiService {
       }
     }
 
+    const requestHeaders = new Headers({
+      'Accept': 'application/vnd.github.v3+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+    });
+
+    if (this.token) {
+      requestHeaders.set('Authorization', `Bearer ${this.token}`);
+    }
+
+    if (options.headers) {
+      new Headers(options.headers).forEach((value, key) => {
+        requestHeaders.set(key, value);
+      });
+    }
+
     const response = await fetch(`${GITHUB_API_BASE}${endpoint}`, {
       ...options,
       signal,
-      headers: {
-        'Authorization': `Bearer ${this.token}`,
-        'Accept': 'application/vnd.github.v3+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-        ...options.headers,
-      },
+      headers: requestHeaders,
     });
 
     // Parse rate limit headers
@@ -117,7 +135,7 @@ export class GitHubApiService {
     const data = response.status === 204 ? null : await response.json();
 
     // 如果是starred repositories的响应，需要处理特殊格式
-    if (endpoint.includes('/user/starred') && Array.isArray(data)) {
+    if (endpoint.includes('/starred') && Array.isArray(data)) {
       return data.map((item: GitHubStarredItem) => {
         // 如果使用了star+json格式，数据结构会不同
         if (item.starred_at && item.repo) {
@@ -134,12 +152,30 @@ export class GitHubApiService {
   }
 
   async getCurrentUser(): Promise<GitHubUser> {
+    this.requireToken();
     return this.makeRequest<GitHubUser>('/user');
   }
 
-  async getStarredRepositories(page = 1, perPage = 100): Promise<Repository[]> {
+  async getUser(username: string): Promise<GitHubUser> {
+    const normalizedUsername = username.trim().replace(/^@/, '');
+    if (!normalizedUsername) {
+      throw new Error('GitHub username required');
+    }
+    return this.makeRequest<GitHubUser>(`/users/${encodeURIComponent(normalizedUsername)}`);
+  }
+
+  async getStarredRepositories(page = 1, perPage = 100, username?: string | null): Promise<Repository[]> {
+    const normalizedUsername = username?.trim().replace(/^@/, '');
+    const endpoint = normalizedUsername
+      ? `/users/${encodeURIComponent(normalizedUsername)}/starred?page=${page}&per_page=${perPage}&sort=updated`
+      : `/user/starred?page=${page}&per_page=${perPage}&sort=updated`;
+
+    if (!normalizedUsername) {
+      this.requireToken();
+    }
+
     const repos = await this.makeRequest<Repository[]>(
-      `/user/starred?page=${page}&per_page=${perPage}&sort=updated`,
+      endpoint,
       {
         headers: {
           'Accept': 'application/vnd.github.star+json'
@@ -149,13 +185,13 @@ export class GitHubApiService {
     return repos;
   }
 
-  async getAllStarredRepositories(): Promise<Repository[]> {
+  async getAllStarredRepositories(username?: string | null): Promise<Repository[]> {
     let allRepos: Repository[] = [];
     let page = 1;
     const perPage = 100;
 
     while (true) {
-      const repos = await this.getStarredRepositories(page, perPage);
+      const repos = await this.getStarredRepositories(page, perPage, username);
       if (repos.length === 0) break;
 
       allRepos = [...allRepos, ...repos];
@@ -406,12 +442,14 @@ export class GitHubApiService {
   }
 
   async unstarRepository(owner: string, repo: string): Promise<void> {
+    this.requireToken();
     await this.makeRequest<void>(`/user/starred/${owner}/${repo}`, {
       method: 'DELETE',
     });
   }
 
   async starRepository(owner: string, repo: string): Promise<void> {
+    this.requireToken();
     await this.makeRequest<void>(`/user/starred/${owner}/${repo}`, {
       method: 'PUT',
     });

@@ -226,13 +226,9 @@ export const ReadmeModal: React.FC<ReadmeModalProps> = ({
 
       if (backend.isAvailable) {
         content = await backend.getRepositoryReadme(owner, name);
-      } else if (githubToken) {
+      } else {
         const githubApi = new GitHubApiService(githubToken);
         content = await githubApi.getRepositoryReadme(owner, name, abortController.signal);
-      } else {
-        setError(language === 'zh' ? '未登录且后端不可用，无法加载 README' : 'Not logged in and backend unavailable, cannot load README');
-        setLoading(false);
-        return;
       }
 
       if (abortController.signal.aborted) return;

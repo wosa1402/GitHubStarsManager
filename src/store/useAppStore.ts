@@ -80,6 +80,7 @@ interface AppActions {
   // Auth actions
   setUser: (user: GitHubUser | null) => void;
   setGitHubToken: (token: string | null) => void;
+  setStarredUsername: (username: string | null) => void;
   logout: () => void;
   
   // Repository actions
@@ -212,6 +213,7 @@ type PersistedAppState = Partial<
     AppState,
     | 'user'
     | 'githubToken'
+    | 'starredUsername'
     | 'isAuthenticated'
     | 'repositories'
     | 'lastSync'
@@ -304,9 +306,15 @@ const normalizePersistedState = (
     ? safePersisted.includePreRelease
     : true;
 
+  const starredUsername =
+    typeof safePersisted.starredUsername === 'string' && safePersisted.starredUsername.trim()
+      ? safePersisted.starredUsername.trim()
+      : safePersisted.user?.login ?? null;
+
   return {
     ...currentState,
     ...safePersisted,
+    starredUsername,
     theme:
       safePersisted.theme === 'light' || safePersisted.theme === 'dark'
         ? safePersisted.theme
@@ -342,7 +350,7 @@ const normalizePersistedState = (
     collapsedSidebarCategoryCount: typeof safePersisted.collapsedSidebarCategoryCount === 'number' && safePersisted.collapsedSidebarCategoryCount > 0 ? safePersisted.collapsedSidebarCategoryCount : 20,
     assetFilters: Array.isArray(safePersisted.assetFilters) && safePersisted.assetFilters.length > 0 ? safePersisted.assetFilters : defaultPresetFilters,
     language: safePersisted.language || 'zh',
-    isAuthenticated: !!(safePersisted.user && safePersisted.githubToken),
+    isAuthenticated: !!(safePersisted.user && (safePersisted.githubToken || starredUsername)),
     releaseViewMode: safePersisted.releaseViewMode || 'timeline',
     releaseSelectedFilters: Array.isArray(safePersisted.releaseSelectedFilters) ? safePersisted.releaseSelectedFilters : [],
     releaseSearchQuery: typeof safePersisted.releaseSearchQuery === 'string' ? safePersisted.releaseSearchQuery : '',
@@ -650,6 +658,7 @@ export const useAppStore = create<AppState & AppActions>()(
       // Initial state
       user: null,
       githubToken: null,
+      starredUsername: null,
       isAuthenticated: false,
       repositories: [],
       isLoading: false,
@@ -722,9 +731,14 @@ export const useAppStore = create<AppState & AppActions>()(
         console.log('Setting GitHub token:', !!token);
         set({ githubToken: token });
       },
+      setStarredUsername: (starredUsername) => {
+        console.log('Setting starred username:', starredUsername);
+        set({ starredUsername });
+      },
       logout: () => set({
         user: null,
         githubToken: null,
+        starredUsername: null,
         isAuthenticated: false,
         repositories: [],
         releases: [],
@@ -1312,6 +1326,7 @@ export const useAppStore = create<AppState & AppActions>()(
         // 持久化用户信息和认证状态
         user: state.user,
         githubToken: state.githubToken,
+        starredUsername: state.starredUsername,
         isAuthenticated: state.isAuthenticated,
 
         // 持久化仓库数据

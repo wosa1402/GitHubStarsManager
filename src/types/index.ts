@@ -65,7 +65,7 @@ export interface Release {
 export interface GitHubUser {
   id: number;
   login: string;
-  name: string;
+  name: string | null;
   avatar_url: string;
   email: string | null;
 }
@@ -138,6 +138,7 @@ export interface AppState {
   // Auth
   user: GitHubUser | null;
   githubToken: string | null;
+  starredUsername: string | null;
   isAuthenticated: boolean;
   
   // Repositories

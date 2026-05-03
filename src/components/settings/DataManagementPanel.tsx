@@ -795,6 +795,7 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
         // 用户和认证
         user: null,
         githubToken: null,
+        starredUsername: null,
         isAuthenticated: false,
 
         // 仓库数据

@@ -271,11 +271,6 @@ const RepositoryCardComponent: React.FC<RepositoryCardProps> = ({
   }, [platformNameMap]);
 
   const handleAIAnalyze = async () => {
-    if (!githubToken) {
-      toast(t('GitHub token 未找到，请重新登录。', 'GitHub token not found. Please login again.'), 'error');
-      return;
-    }
-
     const activeConfig = aiConfigs.find(config => config.id === activeAIConfig);
     if (!activeConfig) {
       toast(t('请先在设置中配置AI服务。', 'Please configure AI service in settings first.'), 'error');
