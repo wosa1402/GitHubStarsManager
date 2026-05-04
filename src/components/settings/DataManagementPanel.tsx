@@ -89,6 +89,7 @@ interface ExportData {
     releaseSubscriptions?: number[];
     readReleases?: number[];
     searchFilters?: SearchFilters;
+    sourceUsernames?: string[];
     hiddenDefaultCategoryIds?: string[];
     defaultCategoryOverrides?: Record<string, Partial<Category>>;
     categoryOrder?: string[];
@@ -124,6 +125,7 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
     customCategories,
     defaultCategoryOverrides,
     hiddenDefaultCategoryIds,
+    sourceUsernames,
     assetFilters,
     discoveryRepos,
     subscriptionRepos,
@@ -482,6 +484,9 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
       if (selectedTypes.includes('searchFilters')) {
         exportDataObj.data.searchFilters = store.searchFilters;
       }
+      if (selectedTypes.includes('sourceUsernames')) {
+        exportDataObj.data.sourceUsernames = store.sourceUsernames;
+      }
       if (selectedTypes.includes('uiSettings')) {
         exportDataObj.data.theme = store.theme;
         exportDataObj.data.language = store.language;
@@ -610,6 +615,9 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
         if (selectedTypes.includes('searchFilters') && importedData.searchFilters) {
           useAppStore.setState({ searchFilters: importedData.searchFilters });
         }
+        if (selectedTypes.includes('sourceUsernames') && Array.isArray(importedData.sourceUsernames)) {
+          store.setSourceUsernames(importedData.sourceUsernames);
+        }
         if (selectedTypes.includes('uiSettings')) {
           if (importedData.theme === 'light' || importedData.theme === 'dark') {
             useAppStore.setState({ theme: importedData.theme });
@@ -670,6 +678,9 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
           const existingSubs = store.releaseSubscriptions;
           const newSubs = new Set([...Array.from(existingSubs), ...importedData.releaseSubscriptions]);
           useAppStore.setState({ releaseSubscriptions: newSubs });
+        }
+        if (selectedTypes.includes('sourceUsernames') && Array.isArray(importedData.sourceUsernames)) {
+          store.setSourceUsernames([...store.sourceUsernames, ...importedData.sourceUsernames]);
         }
       }
 
@@ -796,6 +807,7 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
         user: null,
         githubToken: null,
         starredUsername: null,
+        sourceUsernames: [],
         isAuthenticated: false,
 
         // 仓库数据
@@ -835,10 +847,14 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
           tags: [],
           languages: [],
           platforms: [],
+          sourceUsers: [],
           sortBy: 'stars',
           sortOrder: 'desc',
           isAnalyzed: undefined,
           isSubscribed: undefined,
+          isEdited: undefined,
+          isCategoryLocked: undefined,
+          analysisFailed: undefined,
         },
       });
 
@@ -1046,6 +1062,16 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
       bgColor: 'bg-gray-100 dark:bg-white/[0.04]',
     },
     {
+      key: 'sourceUsernames',
+      label: t('GitHub Star 用户', 'GitHub Star Users'),
+      description: t('用于同步多个 GitHub 账号公开 Stars 的用户名列表。',
+        'Usernames used to sync public stars from multiple GitHub accounts.'),
+      count: sourceUsernames.length,
+      icon: <Github className="w-5 h-5" />,
+      color: 'text-gray-700 dark:text-text-secondary',
+      bgColor: 'bg-gray-100 dark:bg-white/[0.04]',
+    },
+    {
       key: 'releases',
       label: t('Release 发布记录', 'Release Records'),
       description: t('已订阅仓库的 Release 版本信息，含发布说明和资源文件。删除后需重新拉取。',
@@ -1215,6 +1241,7 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
                 { key: 'subscriptionRepos', label: t('订阅页数据', 'Subscription Data') },
                 { key: 'releaseSubscriptions', label: t('Release订阅', 'Release Subscriptions') },
                 { key: 'searchFilters', label: t('搜索过滤器', 'Search Filters') },
+                { key: 'sourceUsernames', label: t('GitHub Star 用户', 'GitHub Star Users') },
                 { key: 'uiSettings', label: t('UI设置', 'UI Settings') },
               ].map((item) => (
                 <label key={item.key} className="flex items-center space-x-2 text-sm text-gray-900 dark:text-text-secondary">
@@ -1594,6 +1621,11 @@ export const DataManagementPanel: React.FC<DataManagementPanelProps> = ({ t }) =
                   {importPreview.data.data.assetFilters && (
                     <p className="text-gray-700 dark:text-text-tertiary">
                       • {t('资源过滤器', 'Asset Filters')}: {importPreview.data.data.assetFilters.length} {t('条', 'items')}
+                    </p>
+                  )}
+                  {importPreview.data.data.sourceUsernames && (
+                    <p className="text-gray-700 dark:text-text-tertiary">
+                      • {t('GitHub Star 用户', 'GitHub Star Users')}: {importPreview.data.data.sourceUsernames.length} {t('条', 'items')}
                     </p>
                   )}
                 </div>

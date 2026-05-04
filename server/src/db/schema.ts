@@ -26,6 +26,7 @@ export function initializeSchema(db: Database.Database): void {
       updated_at TEXT,
       pushed_at TEXT,
       starred_at TEXT,
+      star_sources TEXT,
       owner_login TEXT NOT NULL,
       owner_avatar_url TEXT,
       topics TEXT,
@@ -110,6 +111,7 @@ export function initializeSchema(db: Database.Database): void {
 
   addColumnIfMissing(db, 'ai_configs', 'reasoning_effort', 'TEXT');
   addColumnIfMissing(db, 'repositories', 'category_locked', 'INTEGER DEFAULT 0');
+  addColumnIfMissing(db, 'repositories', 'star_sources', 'TEXT');
   addColumnIfMissing(db, 'releases', 'zipball_url', 'TEXT');
   addColumnIfMissing(db, 'releases', 'tarball_url', 'TEXT');
   addColumnIfMissing(db, 'categories', 'description', 'TEXT');

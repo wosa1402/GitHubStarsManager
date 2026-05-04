@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Search, X, SlidersHorizontal, Monitor, Smartphone, Globe, Terminal, Package, CheckCircle, Bell, BellOff, Apple, Bot, Edit3, Lock, Unlock, AlertCircle, ChevronDown } from 'lucide-react';
+import { Search, X, SlidersHorizontal, Monitor, Smartphone, Globe, Terminal, Package, CheckCircle, Bell, BellOff, Apple, Bot, Edit3, Lock, Unlock, AlertCircle, ChevronDown, Users } from 'lucide-react';
 import { useAppStore, getAllCategories } from '../store/useAppStore';
 import { AIService } from '../services/aiService';
 import { Repository } from '../types';
@@ -82,6 +82,7 @@ export const SearchBar: React.FC = () => {
     aiConfigs,
     activeAIConfig,
     language,
+    sourceUsernames,
     setSearchFilters,
     setSearchResults,
     customCategories,
@@ -178,6 +179,22 @@ export const SearchBar: React.FC = () => {
     
     return stats;
   }, [repositories, releaseSubscriptions, allCategories]);
+
+  const sourceUserStats = useMemo(() => {
+    const configuredUsers = sourceUsernames.map(username => username.trim().replace(/^@/, '').toLowerCase()).filter(Boolean);
+    const storedSourceUsers = repositories.flatMap(repo =>
+      (repo.star_sources || []).map(source => source.login.trim().replace(/^@/, '').toLowerCase()).filter(Boolean)
+    );
+    const selectedUsers = searchFilters.sourceUsers.map(username => username.trim().replace(/^@/, '').toLowerCase()).filter(Boolean);
+    const usernames = Array.from(new Set([...configuredUsers, ...storedSourceUsers, ...selectedUsers]));
+
+    return usernames.map(username => ({
+      username,
+      count: repositories.filter(repo =>
+        (repo.star_sources || []).some(source => source.login.trim().replace(/^@/, '').toLowerCase() === username)
+      ).length,
+    })).filter(item => item.count > 0 || selectedUsers.includes(item.username));
+  }, [repositories, sourceUsernames, searchFilters.sourceUsers]);
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
   const [showSearchHistory, setShowSearchHistory] = useState(false);
   const [searchSuggestions, setSearchSuggestions] = useState<string[]>([]);
@@ -235,7 +252,7 @@ export const SearchBar: React.FC = () => {
     };
 
     performSearch();
-  }, [searchFilters.languages, searchFilters.tags, searchFilters.platforms, searchFilters.isAnalyzed, searchFilters.isSubscribed, searchFilters.isEdited, searchFilters.isCategoryLocked, searchFilters.analysisFailed, searchFilters.minStars, searchFilters.maxStars, searchFilters.sortBy, searchFilters.sortOrder, searchFilters.query, repositories, releaseSubscriptions, allCategories]);
+  }, [searchFilters.languages, searchFilters.tags, searchFilters.platforms, searchFilters.sourceUsers, searchFilters.isAnalyzed, searchFilters.isSubscribed, searchFilters.isEdited, searchFilters.isCategoryLocked, searchFilters.analysisFailed, searchFilters.minStars, searchFilters.maxStars, searchFilters.sortBy, searchFilters.sortOrder, searchFilters.query, repositories, releaseSubscriptions, allCategories]);
 
   // Real-time search effect for repository name matching
   useEffect(() => {
@@ -308,6 +325,7 @@ export const SearchBar: React.FC = () => {
         ...(repo.ai_tags || []),
         ...(repo.ai_platforms || []),
         ...(repo.custom_tags || []),
+        ...(repo.star_sources || []).map(source => source.login),
       ].join(' ').toLowerCase();
       
       const queryWords = normalizedQuery.split(/\s+/);
@@ -342,6 +360,14 @@ export const SearchBar: React.FC = () => {
       filtered = filtered.filter(repo => {
         const repoPlatforms = repo.ai_platforms || [];
         return searchFilters.platforms.some(platform => repoPlatforms.includes(platform));
+      });
+    }
+
+    // Star source user filter
+    if (searchFilters.sourceUsers.length > 0) {
+      filtered = filtered.filter(repo => {
+        const repoSources = (repo.star_sources || []).map(source => source.login.toLowerCase());
+        return searchFilters.sourceUsers.some(username => repoSources.includes(username.toLowerCase()));
       });
     }
 
@@ -461,6 +487,12 @@ export const SearchBar: React.FC = () => {
         if (searchFilters.platforms.length > 0) {
           const repoPlatforms = repo.ai_platforms || [];
           tempFiltered = tempFiltered && searchFilters.platforms.some(platform => repoPlatforms.includes(platform));
+        }
+
+        // Star source user filter
+        if (searchFilters.sourceUsers.length > 0) {
+          const repoSources = (repo.star_sources || []).map(source => source.login.toLowerCase());
+          tempFiltered = tempFiltered && searchFilters.sourceUsers.some(username => repoSources.includes(username.toLowerCase()));
         }
 
         // AI analyzed filter
@@ -705,6 +737,14 @@ export const SearchBar: React.FC = () => {
     setSearchFilters({ platforms: newPlatforms });
   };
 
+  const handleSourceUserToggle = (username: string) => {
+    const normalized = username.trim().replace(/^@/, '').toLowerCase();
+    const newSourceUsers = searchFilters.sourceUsers.includes(normalized)
+      ? searchFilters.sourceUsers.filter(item => item !== normalized)
+      : [...searchFilters.sourceUsers, normalized];
+    setSearchFilters({ sourceUsers: newSourceUsers });
+  };
+
   const clearFilters = () => {
     setSearchQuery('');
     setIsRealTimeSearch(false);
@@ -713,6 +753,7 @@ export const SearchBar: React.FC = () => {
       tags: [],
       languages: [],
       platforms: [],
+      sourceUsers: [],
       sortBy: 'stars',
       sortOrder: 'desc',
       minStars: undefined,
@@ -729,6 +770,7 @@ export const SearchBar: React.FC = () => {
     searchFilters.languages.length +
     searchFilters.tags.length +
     searchFilters.platforms.length +
+    searchFilters.sourceUsers.length +
     (searchFilters.minStars !== undefined ? 1 : 0) +
     (searchFilters.maxStars !== undefined ? 1 : 0) +
     (searchFilters.isAnalyzed !== undefined ? 1 : 0) +
@@ -1166,6 +1208,33 @@ export const SearchBar: React.FC = () => {
                     }`}
                   >
                     {language}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Source Users */}
+          {sourceUserStats.length > 0 && (
+            <div>
+              <h4 className="text-sm font-medium text-gray-900 dark:text-text-primary mb-3">
+                {t('Star 来源账号', 'Star Source Users')}
+              </h4>
+              <div className="flex flex-wrap gap-2">
+                {sourceUserStats.map(({ username, count }) => (
+                  <button
+                    key={username}
+                    onClick={() => handleSourceUserToggle(username)}
+                    className={`${filterChipBaseClass} ${
+                      searchFilters.sourceUsers.includes(username)
+                        ? filterChipActiveClass
+                        : filterChipInactiveClass
+                    }`}
+                    title={t(`显示由 @${username} Star 的仓库`, `Show repositories starred by @${username}`)}
+                  >
+                    <Users className="w-4 h-4" />
+                    <span>@{username}</span>
+                    <span className="text-xs opacity-70">({count})</span>
                   </button>
                 ))}
               </div>

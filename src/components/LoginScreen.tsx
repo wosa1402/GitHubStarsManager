@@ -10,7 +10,7 @@ export const LoginScreen: React.FC = () => {
   const [useTokenUserStars, setUseTokenUserStars] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const { setUser, setGitHubToken, setStarredUsername, repositories, lastSync, language, setLanguage, theme, setTheme } = useAppStore();
+  const { setUser, setGitHubToken, setStarredUsername, setSourceUsernames, repositories, lastSync, language, setLanguage, theme, setTheme } = useAppStore();
 
   const handleConnect = async () => {
     const normalizedUsername = username.trim().replace(/^@/, '');
@@ -43,6 +43,7 @@ export const LoginScreen: React.FC = () => {
 
       setGitHubToken(trimmedToken || null);
       setStarredUsername(importUser.login);
+      setSourceUsernames([importUser.login]);
       setUser(importUser);
 
       console.log('Successfully selected starred user:', importUser);

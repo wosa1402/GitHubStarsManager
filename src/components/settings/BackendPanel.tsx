@@ -15,12 +15,14 @@ export const BackendPanel: React.FC<BackendPanelProps> = ({ t }) => {
     aiConfigs,
     webdavConfigs,
     hiddenDefaultCategoryIds,
+    sourceUsernames,
     backendApiSecret,
     setBackendApiSecret,
     setRepositories,
     setReleases,
     setAIConfigs,
     setWebDAVConfigs,
+    setSourceUsernames,
     showDefaultCategory,
     hideDefaultCategory,
   } = useAppStore();
@@ -94,7 +96,7 @@ export const BackendPanel: React.FC<BackendPanelProps> = ({ t }) => {
       await backend.syncReleases(releases);
       await backend.syncAIConfigs(aiConfigs);
       await backend.syncWebDAVConfigs(webdavConfigs);
-      await backend.syncSettings({ hiddenDefaultCategoryIds });
+      await backend.syncSettings({ hiddenDefaultCategoryIds, sourceUsernames });
       toast(t(
         `已同步到后端：仓库 ${repositories.length}，发布 ${releases.length}，AI配置 ${aiConfigs.length}，WebDAV配置 ${webdavConfigs.length}`,
         `Synced to backend: repos ${repositories.length}, releases ${releases.length}, AI configs ${aiConfigs.length}, WebDAV configs ${webdavConfigs.length}`
@@ -149,6 +151,9 @@ export const BackendPanel: React.FC<BackendPanelProps> = ({ t }) => {
             showDefaultCategory(categoryId);
           }
         }
+      }
+      if (Array.isArray(settingsData.sourceUsernames)) {
+        setSourceUsernames(settingsData.sourceUsernames.filter((username): username is string => typeof username === 'string'));
       }
 
       toast(t(
@@ -324,6 +329,7 @@ export const BackendPanel: React.FC<BackendPanelProps> = ({ t }) => {
           <li>• {t('AI 服务配置', 'AI service configurations')}</li>
           <li>• {t('WebDAV 配置', 'WebDAV configurations')}</li>
           <li>• {t('分类显示设置', 'Category visibility settings')}</li>
+          <li>• {t('GitHub Star 用户列表', 'GitHub star source users')}</li>
         </ul>
       </div>
     </div>

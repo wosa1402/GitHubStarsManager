@@ -13,6 +13,7 @@ export const Header: React.FC = () => {
     lastSync,
     githubToken,
     starredUsername,
+    sourceUsernames,
     repositories,
     setTheme,
     setCurrentView,
@@ -66,7 +67,13 @@ export const Header: React.FC = () => {
   }, []);
 
   const handleSync = async () => {
-    if (!starredUsername && !githubToken) {
+    let syncTargets = Array.from(new Set(
+      (sourceUsernames.length > 0 ? sourceUsernames : [starredUsername || user?.login || ''])
+        .map(username => username.trim().replace(/^@/, '').toLowerCase())
+        .filter(Boolean)
+    ));
+
+    if (syncTargets.length === 0 && !githubToken) {
       toast(t('GitHub 用户名未找到，请重新登录。', 'GitHub username not found. Please login again.'), 'error');
       return;
     }
@@ -74,15 +81,51 @@ export const Header: React.FC = () => {
     setLoading(true);
     try {
       const githubApi = new GitHubApiService(githubToken);
+      if (syncTargets.length === 0) {
+        const currentUser = await githubApi.getCurrentUser();
+        syncTargets = [currentUser.login.toLowerCase()];
+      }
+      const fetchedRepoMap = new Map<string, typeof repositories[number]>();
+      const failedTargets: string[] = [];
 
-      const newRepositories = await githubApi.getAllStarredRepositories(starredUsername);
+      for (const username of syncTargets) {
+        try {
+          const reposForUser = await githubApi.getAllStarredRepositories(username);
+          for (const repo of reposForUser) {
+            const existingFetched = fetchedRepoMap.get(repo.full_name);
+            const sourceMap = new Map(
+              (existingFetched?.star_sources || []).map(source => [source.login.toLowerCase(), source])
+            );
+            sourceMap.set(username, { login: username, starred_at: repo.starred_at });
+            fetchedRepoMap.set(repo.full_name, {
+              ...(existingFetched || repo),
+              ...repo,
+              starred_at: [repo.starred_at, existingFetched?.starred_at]
+                .filter((value): value is string => typeof value === 'string' && value.length > 0)
+                .sort()
+                .reverse()[0],
+              star_sources: Array.from(sourceMap.values()),
+            });
+          }
+        } catch (error) {
+          failedTargets.push(username);
+          console.error(`Failed to sync stars for @${username}:`, error);
+        }
+      }
 
-      const existingRepoMap = new Map(repositories.map(repo => [repo.id, repo]));
+      if (fetchedRepoMap.size === 0 && failedTargets.length > 0) {
+        throw new Error(`All GitHub user syncs failed: ${failedTargets.join(', ')}`);
+      }
+
+      const newRepositories = Array.from(fetchedRepoMap.values());
+      const existingRepoById = new Map(repositories.map(repo => [repo.id, repo]));
+      const existingRepoByFullName = new Map(repositories.map(repo => [repo.full_name, repo]));
       const mergedRepositories = newRepositories.map(newRepo => {
-        const existing = existingRepoMap.get(newRepo.id);
+        const existing = existingRepoById.get(newRepo.id) || existingRepoByFullName.get(newRepo.full_name);
         if (existing) {
           return {
             ...newRepo,
+            id: existing.id,
             has_fetched_releases: existing.has_fetched_releases,
             last_release_fetch_time: existing.last_release_fetch_time,
             ai_summary: existing.ai_summary,
@@ -95,6 +138,7 @@ export const Header: React.FC = () => {
             custom_category: existing.custom_category,
             category_locked: existing.category_locked,
             last_edited: existing.last_edited,
+            subscribed_to_releases: existing.subscribed_to_releases,
           };
         }
         return newRepo;
@@ -109,11 +153,17 @@ export const Header: React.FC = () => {
       console.log('Sync completed successfully');
 
       // 显示同步结果
-      const newRepoCount = newRepositories.length - repositories.length;
+      const oldRepoIds = new Set(repositories.map(repo => repo.id));
+      const oldFullNames = new Set(repositories.map(repo => repo.full_name));
+      const newRepoCount = newRepositories.filter(repo => !oldRepoIds.has(repo.id) && !oldFullNames.has(repo.full_name)).length;
+      const targetLabel = syncTargets.map(username => `@${username}`).join(', ');
+      const warningSuffix = failedTargets.length > 0
+        ? t(`；${failedTargets.length} 个用户同步失败`, `; ${failedTargets.length} user sync(s) failed`)
+        : '';
       if (newRepoCount > 0) {
-        toast(t(`同步完成！从 @${starredUsername || user?.login} 发现 ${newRepoCount} 个新仓库。`, `Sync completed! Found ${newRepoCount} new repositories from @${starredUsername || user?.login}.`), 'success');
+        toast(t(`同步完成！从 ${targetLabel} 发现 ${newRepoCount} 个新仓库${warningSuffix}。`, `Sync completed! Found ${newRepoCount} new repositories from ${targetLabel}${warningSuffix}.`), 'success');
       } else {
-        toast(t(`同步完成！@${starredUsername || user?.login} 的仓库都是最新的。`, `Sync completed! @${starredUsername || user?.login}'s repositories are up to date.`), 'info');
+        toast(t(`同步完成！${targetLabel} 的仓库都是最新的${warningSuffix}。`, `Sync completed! ${targetLabel}'s repositories are up to date${warningSuffix}.`), 'info');
       }
     } catch (error) {
       console.error('Sync failed:', error);

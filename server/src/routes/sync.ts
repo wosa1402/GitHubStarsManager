@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { getDb } from '../db/connection.js';
 import { encrypt, decrypt } from '../services/crypto.js';
 import { config } from '../config.js';
+import { parseSettingValue, serializeSettingValue } from '../utils/settingsSerialization.js';
 
 const router = Router();
 
@@ -56,13 +57,15 @@ router.post('/api/sync/export', (_req, res) => {
     const settings: Record<string, unknown> = {};
     for (const row of settingsRows) {
       const key = row.key as string;
-      let value = row.value as string | null;
-      if (key === 'github_token' && value) {
+      let value: unknown = row.value as string | null;
+      if (key === 'github_token' && typeof value === 'string' && value) {
         try {
           value = maskApiKey(decrypt(value, config.encryptionKey));
         } catch {
           value = '****';
         }
+      } else {
+        value = parseSettingValue(key, value);
       }
       settings[key] = value;
     }
@@ -104,12 +107,12 @@ router.post('/api/sync/import', (req, res) => {
         const repoStmt = db.prepare(`
           INSERT OR REPLACE INTO repositories (
             id, name, full_name, description, html_url, stargazers_count, language,
-            created_at, updated_at, pushed_at, starred_at,
+            created_at, updated_at, pushed_at, starred_at, star_sources,
             owner_login, owner_avatar_url, topics,
             ai_summary, ai_tags, ai_platforms, analyzed_at, analysis_failed,
             custom_description, custom_tags, custom_category, category_locked, last_edited,
             subscribed_to_releases
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
         for (const r of repos) {
           // 验证必需的字段
@@ -121,6 +124,7 @@ router.post('/api/sync/import', (req, res) => {
             r.html_url, r.stargazers_count ?? 0, r.language ?? null,
             r.created_at ?? null, r.updated_at ?? null, r.pushed_at ?? null,
             r.starred_at ?? null,
+            typeof r.star_sources === 'string' ? r.star_sources : JSON.stringify(r.star_sources ?? []),
             r.owner_login ?? '', r.owner_avatar_url ?? null,
             typeof r.topics === 'string' ? r.topics : JSON.stringify(r.topics ?? []),
             r.ai_summary ?? null,
@@ -242,7 +246,7 @@ router.post('/api/sync/import', (req, res) => {
           if (key === 'github_token' && value && typeof value === 'string') {
             settingsStmt.run(key, encrypt(value, config.encryptionKey));
           } else {
-            settingsStmt.run(key, (value as string) ?? null);
+            settingsStmt.run(key, serializeSettingValue(key, value));
           }
           settingsCount++;
         }

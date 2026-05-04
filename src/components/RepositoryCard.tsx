@@ -118,6 +118,10 @@ const RepositoryCardComponent: React.FC<RepositoryCardProps> = ({
   );
 
   const isAnalyzing = analyzingRepositoryIds.has(repoId);
+  const starSourceLogins = useMemo(
+    () => Array.from(new Set((repository.star_sources || []).map(source => source.login).filter(Boolean))),
+    [repository.star_sources]
+  );
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -752,6 +756,24 @@ const RepositoryCardComponent: React.FC<RepositoryCardProps> = ({
           <p className="text-sm text-gray-500 dark:text-text-secondary truncate">
             {repository.owner.login}
           </p>
+          {starSourceLogins.length > 0 && (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {starSourceLogins.slice(0, 4).map(login => (
+                <span
+                  key={login}
+                  className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600 dark:bg-white/[0.04] dark:text-text-tertiary border border-black/[0.04] dark:border-white/[0.04]"
+                  title={language === 'zh' ? `由 @${login} Star` : `Starred by @${login}`}
+                >
+                  @{login}
+                </span>
+              ))}
+              {starSourceLogins.length > 4 && (
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600 dark:bg-white/[0.04] dark:text-text-tertiary border border-black/[0.04] dark:border-white/[0.04]">
+                  +{starSourceLogins.length - 4}
+                </span>
+              )}
+            </div>
+          )}
         </div>
         
         {/* 拖拽按钮 - 右上角 - 手机和平板端隐藏 */}
@@ -1057,6 +1079,7 @@ export const RepositoryCard = React.memo(RepositoryCardComponent, (prevProps, ne
     prevProps.repository.category_locked === nextProps.repository.category_locked &&
     prevProps.repository.description === nextProps.repository.description &&
     prevProps.repository.topics === nextProps.repository.topics &&
+    prevProps.repository.star_sources === nextProps.repository.star_sources &&
     prevProps.repository.stargazers_count === nextProps.repository.stargazers_count &&
     prevProps.repository.pushed_at === nextProps.repository.pushed_at &&
     prevProps.repository.updated_at === nextProps.repository.updated_at &&

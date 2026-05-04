@@ -172,6 +172,9 @@ export async function syncFromBackend(): Promise<void> {
       if (Array.isArray(settings.customCategories)) {
         useAppStore.setState({ customCategories: settings.customCategories });
       }
+      if (Array.isArray(settings.sourceUsernames)) {
+        state.setSourceUsernames(settings.sourceUsernames.filter((username): username is string => typeof username === 'string'));
+      }
       if (Array.isArray(settings.assetFilters)) {
         useAppStore.setState({ assetFilters: settings.assetFilters });
       }
@@ -227,6 +230,7 @@ export async function syncToBackend(): Promise<void> {
         hiddenDefaultCategoryIds: state.hiddenDefaultCategoryIds,
         categoryOrder: state.categoryOrder,
         customCategories: state.customCategories,
+        sourceUsernames: state.sourceUsernames,
         assetFilters: state.assetFilters,
         collapsedSidebarCategoryCount: state.collapsedSidebarCategoryCount,
       }),
@@ -254,6 +258,7 @@ export async function syncToBackend(): Promise<void> {
         hiddenDefaultCategoryIds: state.hiddenDefaultCategoryIds,
         categoryOrder: state.categoryOrder,
         customCategories: state.customCategories,
+        sourceUsernames: state.sourceUsernames,
         assetFilters: state.assetFilters,
         collapsedSidebarCategoryCount: state.collapsedSidebarCategoryCount,
       });
@@ -317,6 +322,7 @@ export function startAutoSync(): () => void {
       state.hiddenDefaultCategoryIds !== prevState.hiddenDefaultCategoryIds ||
       state.categoryOrder !== prevState.categoryOrder ||
       state.customCategories !== prevState.customCategories ||
+      state.sourceUsernames !== prevState.sourceUsernames ||
       state.assetFilters !== prevState.assetFilters ||
       state.collapsedSidebarCategoryCount !== prevState.collapsedSidebarCategoryCount;
 

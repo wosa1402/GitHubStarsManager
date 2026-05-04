@@ -15,6 +15,7 @@ export const BackupPanel: React.FC<BackupPanelProps> = ({ t }) => {
     releases,
     customCategories,
     hiddenDefaultCategoryIds,
+    sourceUsernames,
     aiConfigs,
     webdavConfigs,
     activeWebDAVConfig,
@@ -26,6 +27,7 @@ export const BackupPanel: React.FC<BackupPanelProps> = ({ t }) => {
     deleteCustomCategory,
     hideDefaultCategory,
     showDefaultCategory,
+    setSourceUsernames,
     addAIConfig,
     updateAIConfig,
     deleteAIConfig,
@@ -56,6 +58,7 @@ export const BackupPanel: React.FC<BackupPanelProps> = ({ t }) => {
         releases,
         customCategories,
         hiddenDefaultCategoryIds,
+        sourceUsernames,
         aiConfigs: aiConfigs.map(config => ({
           ...config,
           apiKey: config.apiKey ? '***' : ''
@@ -166,6 +169,10 @@ export const BackupPanel: React.FC<BackupPanelProps> = ({ t }) => {
           }
         } catch (e) {
           console.warn('恢复自定义分类时发生问题：', e);
+        }
+
+        if (Array.isArray(backupData.sourceUsernames)) {
+          setSourceUsernames(backupData.sourceUsernames.filter((username: unknown): username is string => typeof username === 'string'));
         }
 
         try {

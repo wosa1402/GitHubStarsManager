@@ -26,6 +26,7 @@ function transformRepo(row: Record<string, unknown>) {
     updated_at: row.updated_at,
     pushed_at: row.pushed_at,
     starred_at: row.starred_at,
+    star_sources: parseJsonColumn(row.star_sources),
     owner: { login: row.owner_login, avatar_url: row.owner_avatar_url },
     topics: parseJsonColumn(row.topics),
     ai_summary: row.ai_summary,
@@ -122,12 +123,12 @@ router.put('/api/repositories', (req, res) => {
     const stmt = db.prepare(`
       INSERT OR REPLACE INTO repositories (
         id, name, full_name, description, html_url, stargazers_count, language,
-        created_at, updated_at, pushed_at, starred_at,
+        created_at, updated_at, pushed_at, starred_at, star_sources,
         owner_login, owner_avatar_url, topics,
         ai_summary, ai_tags, ai_platforms, analyzed_at, analysis_failed,
         custom_description, custom_tags, custom_category, category_locked, last_edited,
         subscribed_to_releases
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const deleteAllReleases = db.prepare('DELETE FROM releases');
@@ -164,6 +165,7 @@ router.put('/api/repositories', (req, res) => {
           repo.html_url, repo.stargazers_count ?? 0, repo.language ?? null,
           repo.created_at ?? null, repo.updated_at ?? null, repo.pushed_at ?? null,
           repo.starred_at ?? null,
+          JSON.stringify(Array.isArray(repo.star_sources) ? repo.star_sources : []),
           owner?.login ?? '', owner?.avatar_url ?? null,
           JSON.stringify(Array.isArray(repo.topics) ? repo.topics : []),
           repo.ai_summary ?? null,
@@ -209,6 +211,7 @@ router.patch('/api/repositories/:id', (req, res) => {
       subscribed_to_releases: (v) => (v === true || v === 1) ? 1 : 0,
       description: (v) => v,
       name: (v) => v,
+      star_sources: (v) => JSON.stringify(Array.isArray(v) ? v : []),
     };
 
     const setClauses: string[] = [];

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { getDb } from '../db/connection.js';
 import { encrypt, decrypt } from '../services/crypto.js';
 import { config } from '../config.js';
+import { parseSettingValue, serializeSettingValue } from '../utils/settingsSerialization.js';
 
 const router = Router();
 
@@ -414,7 +415,7 @@ router.get('/api/settings', (_req, res) => {
 
     for (const row of rows) {
       const key = row.key as string;
-      let value = row.value as string | null;
+      let value: unknown = row.value as string | null;
 
       if (key === 'github_token' && value) {
         const { decryptedValue, status } = getMaskedSecretResult({
@@ -424,6 +425,8 @@ router.get('/api/settings', (_req, res) => {
         });
         value = status === 'empty' ? '' : maskApiKey(decryptedValue);
         settings.github_token_status = status;
+      } else {
+        value = parseSettingValue(key, value);
       }
 
       settings[key] = value;
@@ -446,17 +449,19 @@ router.put('/api/settings', (req, res) => {
 
     const upsert = db.transaction(() => {
       for (const [key, rawValue] of Object.entries(updates)) {
-        let value = rawValue as string | null;
-
-        if (key === 'github_token' && value && typeof value === 'string') {
-          if (value.startsWith('***')) {
+        if (key === 'github_token') {
+          if (typeof rawValue === 'string' && rawValue.startsWith('***')) {
             // Skip masked values — keep existing
             continue;
           }
-          value = encrypt(value, config.encryptionKey);
+          const value = rawValue && typeof rawValue === 'string'
+            ? encrypt(rawValue, config.encryptionKey)
+            : null;
+          stmt.run(key, value);
+          continue;
         }
 
-        stmt.run(key, value ?? null);
+        stmt.run(key, serializeSettingValue(key, rawValue));
       }
     });
 

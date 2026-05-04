@@ -149,6 +149,7 @@ export interface SyncSettingsRequest {
   hiddenDefaultCategoryIds?: string[];
   categoryOrder?: string[];
   customCategories?: unknown[];
+  sourceUsernames?: string[];
   assetFilters?: unknown[];
   collapsedSidebarCategoryCount?: number;
   github_token?: string;

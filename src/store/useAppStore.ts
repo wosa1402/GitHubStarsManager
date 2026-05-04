@@ -81,6 +81,9 @@ interface AppActions {
   setUser: (user: GitHubUser | null) => void;
   setGitHubToken: (token: string | null) => void;
   setStarredUsername: (username: string | null) => void;
+  setSourceUsernames: (usernames: string[]) => void;
+  addSourceUsername: (username: string) => void;
+  removeSourceUsername: (username: string) => void;
   logout: () => void;
   
   // Repository actions
@@ -199,6 +202,7 @@ const initialSearchFilters: SearchFilters = {
   tags: [],
   languages: [],
   platforms: [],
+  sourceUsers: [],
   sortBy: 'stars',
   sortOrder: 'desc',
   isAnalyzed: undefined,
@@ -214,6 +218,7 @@ type PersistedAppState = Partial<
     | 'user'
     | 'githubToken'
     | 'starredUsername'
+    | 'sourceUsernames'
     | 'isAuthenticated'
     | 'repositories'
     | 'lastSync'
@@ -282,9 +287,25 @@ const normalizePersistedState = (
 
   const repositories = Array.isArray(safePersisted.repositories) ? safePersisted.repositories : [];
   const releases = Array.isArray(safePersisted.releases) ? safePersisted.releases : [];
+  const normalizeUsername = (username: string) => username.trim().replace(/^@/, '').toLowerCase();
+
+  const starredUsername =
+    typeof safePersisted.starredUsername === 'string' && safePersisted.starredUsername.trim()
+      ? safePersisted.starredUsername.trim()
+      : safePersisted.user?.login ?? null;
+  const legacySourceUsername = typeof starredUsername === 'string' ? normalizeUsername(starredUsername) : '';
+  const sourceUsernames = Array.isArray(safePersisted.sourceUsernames)
+    ? Array.from(new Set(
+      safePersisted.sourceUsernames
+        .filter((username): username is string => typeof username === 'string')
+        .map(normalizeUsername)
+        .filter(Boolean)
+    ))
+    : (legacySourceUsername ? [legacySourceUsername] : []);
 
   // Migration for old users: mark repos with existing releases as already synced
   const migratedRepositories = repositories.map(repo => {
+    let nextRepo = repo;
     const hasExistingRelease = releases.some(r => r.repository?.id === repo.id);
     if (hasExistingRelease && !repo.has_fetched_releases) {
       // Backfill last_release_fetch_time from the latest persisted release timestamp
@@ -292,13 +313,26 @@ const normalizePersistedState = (
       const latestReleaseTime = repoReleases.length > 0
         ? Math.max(...repoReleases.map(r => new Date(r.published_at).getTime()))
         : null;
-      return {
+      nextRepo = {
         ...repo,
         has_fetched_releases: true,
         last_release_fetch_time: repo.last_release_fetch_time || (latestReleaseTime ? new Date(latestReleaseTime).toISOString() : new Date().toISOString())
       };
     }
-    return repo;
+
+    if (!Array.isArray(nextRepo.star_sources)) {
+      return {
+        ...nextRepo,
+        star_sources: legacySourceUsername ? [{ login: legacySourceUsername, starred_at: repo.starred_at }] : [],
+      };
+    }
+
+    return {
+      ...nextRepo,
+      star_sources: nextRepo.star_sources
+        .filter(source => typeof source.login === 'string' && source.login.trim())
+        .map(source => ({ ...source, login: normalizeUsername(source.login) })),
+    };
   });
 
   // Default includePreRelease to true if not set (backward compatibility)
@@ -306,15 +340,11 @@ const normalizePersistedState = (
     ? safePersisted.includePreRelease
     : true;
 
-  const starredUsername =
-    typeof safePersisted.starredUsername === 'string' && safePersisted.starredUsername.trim()
-      ? safePersisted.starredUsername.trim()
-      : safePersisted.user?.login ?? null;
-
   return {
     ...currentState,
     ...safePersisted,
     starredUsername,
+    sourceUsernames,
     theme:
       safePersisted.theme === 'light' || safePersisted.theme === 'dark'
         ? safePersisted.theme
@@ -659,6 +689,7 @@ export const useAppStore = create<AppState & AppActions>()(
       user: null,
       githubToken: null,
       starredUsername: null,
+      sourceUsernames: [],
       isAuthenticated: false,
       repositories: [],
       isLoading: false,
@@ -735,10 +766,27 @@ export const useAppStore = create<AppState & AppActions>()(
         console.log('Setting starred username:', starredUsername);
         set({ starredUsername });
       },
+      setSourceUsernames: (sourceUsernames) => set({
+        sourceUsernames: Array.from(new Set(
+          sourceUsernames
+            .map(username => username.trim().replace(/^@/, '').toLowerCase())
+            .filter(Boolean)
+        )),
+      }),
+      addSourceUsername: (username) => set((state) => {
+        const normalized = username.trim().replace(/^@/, '').toLowerCase();
+        if (!normalized || state.sourceUsernames.includes(normalized)) return {};
+        return { sourceUsernames: [...state.sourceUsernames, normalized] };
+      }),
+      removeSourceUsername: (username) => set((state) => {
+        const normalized = username.trim().replace(/^@/, '').toLowerCase();
+        return { sourceUsernames: state.sourceUsernames.filter(item => item !== normalized) };
+      }),
       logout: () => set({
         user: null,
         githubToken: null,
         starredUsername: null,
+        sourceUsernames: [],
         isAuthenticated: false,
         repositories: [],
         releases: [],
@@ -1320,13 +1368,14 @@ export const useAppStore = create<AppState & AppActions>()(
     }),
     {
       name: 'github-stars-manager',
-      version: 5,
+      version: 6,
       storage: debouncedPersistStorage,
       partialize: (state) => ({
         // 持久化用户信息和认证状态
         user: state.user,
         githubToken: state.githubToken,
         starredUsername: state.starredUsername,
+        sourceUsernames: state.sourceUsernames,
         isAuthenticated: state.isAuthenticated,
 
         // 持久化仓库数据
@@ -1419,16 +1468,35 @@ export const useAppStore = create<AppState & AppActions>()(
           state.defaultCategoryOverrides = {};
         }
 
+        if (state && !Array.isArray(state.sourceUsernames)) {
+          const legacyUsername = typeof state.starredUsername === 'string'
+            ? state.starredUsername.trim().replace(/^@/, '').toLowerCase()
+            : '';
+          state.sourceUsernames = legacyUsername ? [legacyUsername] : [];
+        }
+
         // 迁移仓库数据中的旧标记
         if (state && Array.isArray(state.repositories)) {
           let migratedCount = 0;
           state.repositories = state.repositories.map((repo: Repository) => {
+            const legacyUsername = typeof state.starredUsername === 'string'
+              ? state.starredUsername.trim().replace(/^@/, '').toLowerCase()
+              : '';
             // 将旧的 '__EMPTY__' 标记转换为空字符串（表示用户明确清空）
             if (repo.custom_description === '__EMPTY__') {
               migratedCount++;
-              return { ...repo, custom_description: '' };
+              return {
+                ...repo,
+                custom_description: '',
+                star_sources: Array.isArray(repo.star_sources)
+                  ? repo.star_sources
+                  : (legacyUsername ? [{ login: legacyUsername, starred_at: repo.starred_at }] : []),
+              };
             }
-            return repo;
+            if (!Array.isArray(repo.star_sources) && legacyUsername) {
+              return { ...repo, star_sources: [{ login: legacyUsername, starred_at: repo.starred_at }] };
+            }
+            return Array.isArray(repo.star_sources) ? repo : { ...repo, star_sources: [] };
           });
           if (migratedCount > 0) {
             console.log(`Migrated ${migratedCount} repositories: converted '__EMPTY__' to empty string`);

@@ -12,6 +12,7 @@ export interface Repository {
   updated_at: string;
   pushed_at: string;
   starred_at?: string;
+  star_sources?: StarSource[];
   owner: {
     login: string;
     avatar_url: string;
@@ -30,6 +31,11 @@ export interface Repository {
   last_edited?: string;
   last_release_fetch_time?: string;  // ISO timestamp, for incremental sync
   has_fetched_releases?: boolean;   // whether this repo has been synced for releases
+}
+
+export interface StarSource {
+  login: string;
+  starred_at?: string;
 }
 
 export interface ReleaseAsset {
@@ -106,6 +112,7 @@ export interface SearchFilters {
   tags: string[];
   languages: string[];
   platforms: string[]; // 新增：平台过滤
+  sourceUsers: string[];
   sortBy: 'stars' | 'updated' | 'name' | 'starred';
   sortOrder: 'desc' | 'asc';
   minStars?: number;
@@ -139,6 +146,7 @@ export interface AppState {
   user: GitHubUser | null;
   githubToken: string | null;
   starredUsername: string | null;
+  sourceUsernames: string[];
   isAuthenticated: boolean;
   
   // Repositories
