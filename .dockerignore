@@ -1,0 +1,17 @@
+.git
+.github
+.codex
+.env*
+node_modules
+dist
+build
+coverage
+server
+data
+release
+electron
+*.log
+npm-debug.log*
+.DS_Store
+docker-compose*.yml
+DOCKER.md

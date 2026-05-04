@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  frontend:
+    image: ghcr.io/${GHCR_OWNER:-wosa1402}/${GHCR_REPO:-githubstarsmanager}-frontend:${IMAGE_TAG:-latest}
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  backend:
+    image: ghcr.io/${GHCR_OWNER:-wosa1402}/${GHCR_REPO:-githubstarsmanager}-backend:${IMAGE_TAG:-latest}
+    expose:
+      - "3000"
+    environment:
+      - API_SECRET=${API_SECRET:-}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
+    volumes:
+      - ./data/backend:/app/data
+    restart: unless-stopped

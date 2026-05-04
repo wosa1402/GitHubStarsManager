@@ -1,66 +1,94 @@
 # Docker Deployment
 
-This application can be deployed using Docker with minimal configuration. The Docker setup serves the static frontend files via Nginx and handles CORS properly.
+This application ships as two containers:
+
+- `frontend`: static React files served by Nginx, with `/api` proxied to the backend.
+- `backend`: Express + SQLite API server.
 
 ## Prerequisites
 
 - Docker installed on your system
-- Docker Compose (optional, but recommended)
+- Docker Compose
 
-## Building and Running with Docker
+## Run with Published Images
 
-### Using Docker Compose (Recommended)
-
-```bash
-# Build and start the container
-docker-compose up -d
-
-# The application will be available at http://localhost:8080
-```
-
-### Using Docker directly
+GitHub Actions builds and pushes images to GitHub Container Registry when code is pushed to `main`, `master`, or a `v*` tag.
 
 ```bash
-# Build the image
-docker build -t github-stars-manager .
+docker compose -f docker-compose.prod.yml up -d
 
-# Run the container
-docker run -d -p 8080:80 --name github-stars-manager github-stars-manager
-
-# The application will be available at http://localhost:8080
+# The application will be available at:
+# http://localhost:8080
 ```
 
-## CORS Handling
+Default image names:
 
-This Docker setup handles CORS in two ways:
+- `ghcr.io/wosa1402/githubstarsmanager-frontend:latest`
+- `ghcr.io/wosa1402/githubstarsmanager-backend:latest`
 
-1. **Nginx CORS Headers**: The Nginx configuration adds appropriate CORS headers to allow API calls to external services.
+For a fork or a custom tag, set environment variables before starting:
 
-2. **Client-Side Handling**: The application is designed to work with any AI or WebDAV service URL configured by the user, without requiring proxying.
+```bash
+GHCR_OWNER=your-github-name \
+GHCR_REPO=githubstarsmanager \
+IMAGE_TAG=latest \
+docker compose -f docker-compose.prod.yml up -d
+```
+
+## Build Locally
+
+Use the local compose file when you want to build images on the machine where the app is deployed:
+
+```bash
+docker compose up -d --build
+```
 
 ## Configuration
 
-No special configuration is needed for the Docker container itself. All application settings (API URLs, credentials, etc.) are configured through the application UI.
-
-## Environment Variables
-
-While not required, you can pass environment variables to the container if needed:
+Create a `.env` file for production:
 
 ```bash
-docker run -d -p 8080:80 -e NODE_ENV=production --name github-stars-manager github-stars-manager
+cp .env.example .env
 ```
 
-## Stopping the Container
+Then set stable secrets:
 
 ```bash
-# With Docker Compose
-docker-compose down
+API_SECRET=change-me
+ENCRYPTION_KEY=$(openssl rand -hex 32)
+```
 
-# With Docker directly
-docker stop github-stars-manager
-docker rm github-stars-manager
+`ENCRYPTION_KEY` must be 64 hex characters. Do not change it after storing AI, GitHub, or WebDAV credentials, or existing encrypted values will no longer decrypt.
+
+The production compose file stores backend data on the host:
+
+```text
+./data/backend:/app/data
+```
+
+Back up this directory before migrations or major upgrades.
+
+## GitHub Container Registry
+
+The workflow is located at:
+
+```text
+.github/workflows/docker-images.yml
+```
+
+It builds both images for:
+
+- `linux/amd64`
+- `linux/arm64`
+
+Pull requests only build images for validation. Pushes to branches and tags also publish them to GHCR.
+
+## Stop
+
+```bash
+docker compose -f docker-compose.prod.yml down
 ```
 
 ## Note on Desktop Packaging
 
-This Docker setup does not affect the existing desktop packaging workflows. The GitHub Actions workflow for building desktop applications remains unchanged and continues to work as before.
+This Docker setup does not affect the existing desktop packaging workflow.
