@@ -4,6 +4,8 @@
 .env*
 node_modules
 dist
+!dist/
+!dist/**
 build
 coverage
 server

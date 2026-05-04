@@ -23,7 +23,7 @@ jobs:
         include:
           - component: frontend
             context: .
-            file: ./Dockerfile
+            file: ./Dockerfile.frontend-runtime
           - component: backend
             context: ./server
             file: ./server/Dockerfile
@@ -46,6 +46,19 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Set up Node.js
+        if: matrix.component == 'frontend'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Build frontend assets
+        if: matrix.component == 'frontend'
+        run: |
+          npm ci
+          npm run build
 
       - name: Log in to GitHub Container Registry
         if: github.event_name != 'pull_request'
