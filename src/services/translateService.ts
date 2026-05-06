@@ -30,7 +30,7 @@ const parseJwtExpiration = (token: string): number => {
   try {
     const parts = token.split('.');
     if (parts.length !== 3) return 0;
-    
+
     const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
     const payload = JSON.parse(atob(base64));
     if (payload.exp) {
@@ -51,7 +51,7 @@ const getStoredToken = (): CachedToken | null => {
   try {
     const stored = localStorage.getItem('ms_translate_token');
     if (!stored) return null;
-    
+
     const parsed = JSON.parse(stored) as CachedToken;
     if (isTokenValid(parsed)) {
       return parsed;
@@ -299,7 +299,7 @@ export const translateBatch = async (
   textType?: 'html' | 'plain'
 ): Promise<TranslateResult[]> => {
   if (texts.length === 0) return [];
-  
+
   if (texts.length === 1) {
     const result = await translateText({ text: texts[0], to, from, signal, textType });
     return [result];

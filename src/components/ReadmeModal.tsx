@@ -544,8 +544,8 @@ export const ReadmeModal: React.FC<ReadmeModalProps> = ({
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
                         <span className="hidden sm:inline">
-                          {translateProgress.total > 0 
-                            ? `${translateProgress.current}/${translateProgress.total}` 
+                          {translateProgress.total > 0
+                            ? `${translateProgress.current}/${translateProgress.total}`
                             : t('翻译中...', 'Translating...')}
                         </span>
                       </>
