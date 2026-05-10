@@ -1,9 +1,17 @@
 import type Database from 'better-sqlite3';
-import { initializeSchema } from './schema.js';
+import { addColumnIfMissing, initializeSchema } from './schema.js';
 
 const migrations: Record<number, (db: Database.Database) => void> = {
   1: (db) => {
     initializeSchema(db);
+  },
+  2: (db) => {
+    addColumnIfMissing(db, 'repositories', 'archive_backed_up_at', 'TEXT');
+    addColumnIfMissing(db, 'repositories', 'archive_backup_path', 'TEXT');
+    addColumnIfMissing(db, 'repositories', 'archive_backup_size', 'INTEGER');
+    addColumnIfMissing(db, 'repositories', 'mirror_backed_up_at', 'TEXT');
+    addColumnIfMissing(db, 'repositories', 'mirror_backup_path', 'TEXT');
+    addColumnIfMissing(db, 'repositories', 'mirror_backup_size', 'INTEGER');
   },
 };
 

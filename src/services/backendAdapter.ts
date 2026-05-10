@@ -219,6 +219,40 @@ class BackendAdapter {
     return res.json() as Promise<{ repositories: Repository[]; total: number }>;
   }
 
+  async backupRepositoryMirror(repository: Repository, webdavConfigId: string, githubToken?: string | null): Promise<{
+    backedUpAt: string;
+    mirrorPath: string;
+    metadataPath: string;
+    size: number;
+    format: 'git-bundle';
+  }> {
+    if (!this._backendUrl) throw new Error('Backend not available');
+
+    const res = await this.fetchWithTimeout(`${this._backendUrl}/repositories/mirror-backup`, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({ repository, webdavConfigId, githubToken }),
+    }, 3600000);
+
+    if (!res.ok) {
+      try {
+        const data = await res.json() as { error?: string; code?: string };
+        throw new Error(data.error || translateBackendError(data.code, `Mirror backup error: ${res.status}`));
+      } catch (error) {
+        if (error instanceof Error) throw error;
+        throw new Error(`Mirror backup error: ${res.status}`);
+      }
+    }
+
+    return res.json() as Promise<{
+      backedUpAt: string;
+      mirrorPath: string;
+      metadataPath: string;
+      size: number;
+      format: 'git-bundle';
+    }>;
+  }
+
   async syncReleases(releases: Release[]): Promise<void> {
     if (!this._backendUrl) return;
 

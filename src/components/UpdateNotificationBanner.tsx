@@ -8,7 +8,7 @@ export const UpdateNotificationBanner: React.FC = () => {
 
   const t = (zh: string, en: string) => language === 'zh' ? zh : en;
 
-  if (!updateNotification || updateNotification.dismissed) {
+  if (!UpdateService.isUpdateBannerEnabled() || !updateNotification || updateNotification.dismissed) {
     return null;
   }
 

@@ -31,6 +31,12 @@ export interface Repository {
   last_edited?: string;
   last_release_fetch_time?: string;  // ISO timestamp, for incremental sync
   has_fetched_releases?: boolean;   // whether this repo has been synced for releases
+  archive_backed_up_at?: string;
+  archive_backup_path?: string;
+  archive_backup_size?: number;
+  mirror_backed_up_at?: string;
+  mirror_backup_path?: string;
+  mirror_backup_size?: number;
 }
 
 export interface StarSource {

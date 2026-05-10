@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { X, Star, FolderOpen, Bot, Bell, BellOff, CheckSquare, Square, Loader2, Lock, Unlock, RotateCcw } from 'lucide-react';
+import { X, Star, FolderOpen, Bot, Bell, BellOff, CheckSquare, Square, Loader2, Lock, Unlock, RotateCcw, UploadCloud, FileArchive } from 'lucide-react';
 import { Repository } from '../types';
 import { useAppStore } from '../store/useAppStore';
 
@@ -119,6 +119,8 @@ export const BulkActionToolbar: React.FC<BulkActionToolbarProps> = ({
           'lock-category': { zh: '批量锁定分类', en: 'Lock Categories' },
           'unlock-category': { zh: '批量解锁分类', en: 'Unlock Categories' },
           'restore': { zh: '批量还原', en: 'Bulk Restore' },
+          'backup-archive': { zh: '备份源码', en: 'Back Up Source' },
+          'backup-mirror': { zh: 'Git 镜像备份', en: 'Git Mirror Backup' },
         };
         const label = actionLabels[action];
         const message = language === 'zh'
@@ -316,6 +318,40 @@ export const BulkActionToolbar: React.FC<BulkActionToolbarProps> = ({
                 <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
               ) : (
                 <Unlock className="w-4 h-4 sm:w-5 sm:h-5" />
+              )}
+            </button>
+
+            <button
+              onClick={(e) => handleAction('backup-archive', e)}
+              disabled={isProcessing}
+              className={`flex-shrink-0 flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-lg transition-colors ${
+                showConfirm === 'backup-archive'
+                  ? 'bg-brand-indigo text-white hover:bg-brand-hover'
+                  : 'bg-gray-100 text-gray-700 dark:bg-white/[0.04] dark:text-text-secondary hover:bg-gray-200 hover:text-gray-900 dark:hover:bg-white/[0.08] dark:hover:text-text-primary'
+              } disabled:opacity-50 disabled:cursor-not-allowed`}
+              title={t('备份源码到 WebDAV', 'Back up source to WebDAV')}
+            >
+              {isProcessing && showConfirm === 'backup-archive' ? (
+                <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
+              ) : (
+                <UploadCloud className="w-4 h-4 sm:w-5 sm:h-5" />
+              )}
+            </button>
+
+            <button
+              onClick={(e) => handleAction('backup-mirror', e)}
+              disabled={isProcessing}
+              className={`flex-shrink-0 flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-lg transition-colors ${
+                showConfirm === 'backup-mirror'
+                  ? 'bg-brand-indigo text-white hover:bg-brand-hover'
+                  : 'bg-gray-100 text-gray-700 dark:bg-white/[0.04] dark:text-text-secondary hover:bg-gray-200 hover:text-gray-900 dark:hover:bg-white/[0.08] dark:hover:text-text-primary'
+              } disabled:opacity-50 disabled:cursor-not-allowed`}
+              title={t('完整 Git 镜像备份', 'Full Git mirror backup')}
+            >
+              {isProcessing && showConfirm === 'backup-mirror' ? (
+                <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
+              ) : (
+                <FileArchive className="w-4 h-4 sm:w-5 sm:h-5" />
               )}
             </button>
 

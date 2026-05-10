@@ -9,7 +9,11 @@ import { PROJECT_REPO_URL } from '../constants/project';
 import { version } from '../../package.json';
 
 const REPO_OWNER = PROJECT_REPO_URL.split('/').slice(-2).join('/');
-const VERSION_INFO_URL = `https://raw.githubusercontent.com/${REPO_OWNER}/main/versions/version-info.xml`;
+const VERSION_INFO_URL =
+  import.meta.env.VITE_UPDATE_INFO_URL ||
+  `https://raw.githubusercontent.com/${REPO_OWNER}/main/versions/version-info.xml`;
+const AUTO_UPDATE_CHECK_ENABLED = import.meta.env.VITE_AUTO_UPDATE_CHECK === 'true';
+const UPDATE_BANNER_ENABLED = import.meta.env.VITE_UPDATE_BANNER === 'true';
 
 export interface UpdateCheckResult {
   hasUpdate: boolean;
@@ -22,6 +26,14 @@ export class UpdateService {
 
   private static getCurrentVersion(): string {
     return version;
+  }
+
+  static isAutoUpdateCheckEnabled(): boolean {
+    return AUTO_UPDATE_CHECK_ENABLED;
+  }
+
+  static isUpdateBannerEnabled(): boolean {
+    return UPDATE_BANNER_ENABLED;
   }
 
   static async checkForUpdates(): Promise<UpdateCheckResult> {

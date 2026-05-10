@@ -13,6 +13,8 @@ import { AIAnalysisOptimizer, AnalysisResult } from '../services/aiAnalysisOptim
 import { resolveCategoryAssignment, getAICategory, getDefaultCategory, computeCustomCategory } from '../utils/categoryUtils';
 import { forceSyncToBackend } from '../services/autoSync';
 import { useDialog } from '../hooks/useDialog';
+import { backupRepositoryArchive, formatBytes } from '../services/repositoryBackupService';
+import { backend } from '../services/backendAdapter';
 
 interface RepositoryListProps {
   repositories: Repository[];
@@ -40,7 +42,9 @@ export const RepositoryList: React.FC<RepositoryListProps> = ({
     searchFilters,
     toggleReleaseSubscription,
     batchUnsubscribeReleases,
-    releaseSubscriptions
+    releaseSubscriptions,
+    webdavConfigs,
+    activeWebDAVConfig
   } = useAppStore();
 
   const { toast, confirm } = useDialog();
@@ -647,6 +651,137 @@ export const RepositoryList: React.FC<RepositoryListProps> = ({
         case 'restore': {
           setShowRestoreModal(true);
           return;
+        }
+
+        case 'backup-archive': {
+          const activeWebDAV = webdavConfigs.find(config => config.id === activeWebDAVConfig);
+          if (!activeWebDAV) {
+            toast(t('请先在设置中配置并激活 WebDAV。', 'Please configure and activate WebDAV in settings first.'), 'error');
+            return;
+          }
+
+          if (activeWebDAV.passwordStatus === 'decrypt_failed' || activeWebDAV.passwordStatus === 'empty') {
+            toast(t('WebDAV 密码无法解密或为空，请重新保存配置。', 'The WebDAV password could not be decrypted or is empty. Please save the configuration again.'), 'error');
+            return;
+          }
+
+          const confirmed = await confirm(
+            t('批量备份源码', 'Bulk Back Up Source'),
+            t(
+              `将下载 ${repos.length} 个仓库的当前源码压缩包并上传到 WebDAV。是否继续？`,
+              `Download current source archives for ${repos.length} repositories and upload them to WebDAV. Continue?`
+            ),
+            { type: 'warning' }
+          );
+          if (!confirmed) return;
+
+          let successCount = 0;
+          let totalBytes = 0;
+          const failedRepos: string[] = [];
+
+          for (const repo of repos) {
+            try {
+              const result = await backupRepositoryArchive({
+                repository: repo,
+                githubToken,
+                webdavConfig: activeWebDAV,
+              });
+
+              updateRepository({
+                ...repo,
+                archive_backed_up_at: result.archivedAt,
+                archive_backup_path: result.archivePath,
+                archive_backup_size: result.size,
+              });
+              successCount++;
+              totalBytes += result.size;
+            } catch (error) {
+              console.error(`Failed to back up ${repo.full_name}:`, error);
+              failedRepos.push(`${repo.full_name}: ${(error as Error).message}`);
+            }
+          }
+
+          await forceSyncToBackend();
+
+          const failedMsg = failedRepos.length > 0
+            ? (language === 'zh'
+              ? `\n\n失败 (${failedRepos.length} 个):\n${failedRepos.join('\n')}`
+              : `\n\nFailed (${failedRepos.length}):\n${failedRepos.join('\n')}`)
+            : '';
+
+          toast(language === 'zh'
+            ? `成功备份 ${successCount} 个仓库源码（${formatBytes(totalBytes)}）${failedMsg}`
+            : `Backed up ${successCount} repository source archives (${formatBytes(totalBytes)})${failedMsg}`,
+            failedRepos.length > 0 ? 'error' : 'success'
+          );
+          break;
+        }
+
+        case 'backup-mirror': {
+          const activeWebDAV = webdavConfigs.find(config => config.id === activeWebDAVConfig);
+          if (!activeWebDAV) {
+            toast(t('请先在设置中配置并激活 WebDAV。', 'Please configure and activate WebDAV in settings first.'), 'error');
+            return;
+          }
+
+          if (activeWebDAV.passwordStatus === 'decrypt_failed' || activeWebDAV.passwordStatus === 'empty') {
+            toast(t('WebDAV 密码无法解密或为空，请重新保存配置。', 'The WebDAV password could not be decrypted or is empty. Please save the configuration again.'), 'error');
+            return;
+          }
+
+          if (!backend.isAvailable) {
+            toast(t('完整 Git 镜像备份需要启用后端服务。', 'Full Git mirror backup requires the backend service.'), 'error');
+            return;
+          }
+
+          const confirmed = await confirm(
+            t('批量 Git 镜像备份', 'Bulk Git Mirror Backup'),
+            t(
+              `将备份 ${repos.length} 个仓库的完整 Git 历史、分支和标签，并上传到 WebDAV。此操作可能耗时较久。是否继续？`,
+              `Back up full Git history, branches, and tags for ${repos.length} repositories to WebDAV. This may take a while. Continue?`
+            ),
+            { type: 'warning' }
+          );
+          if (!confirmed) return;
+
+          let successCount = 0;
+          let totalBytes = 0;
+          const failedRepos: string[] = [];
+
+          await backend.syncWebDAVConfigs(webdavConfigs);
+          await backend.syncSettings({ activeWebDAVConfig });
+
+          for (const repo of repos) {
+            try {
+              const result = await backend.backupRepositoryMirror(repo, activeWebDAV.id, githubToken);
+              updateRepository({
+                ...repo,
+                mirror_backed_up_at: result.backedUpAt,
+                mirror_backup_path: result.mirrorPath,
+                mirror_backup_size: result.size,
+              });
+              successCount++;
+              totalBytes += result.size;
+            } catch (error) {
+              console.error(`Failed to back up mirror for ${repo.full_name}:`, error);
+              failedRepos.push(`${repo.full_name}: ${(error as Error).message}`);
+            }
+          }
+
+          await forceSyncToBackend();
+
+          const failedMsg = failedRepos.length > 0
+            ? (language === 'zh'
+              ? `\n\n失败 (${failedRepos.length} 个):\n${failedRepos.join('\n')}`
+              : `\n\nFailed (${failedRepos.length}):\n${failedRepos.join('\n')}`)
+            : '';
+
+          toast(language === 'zh'
+            ? `成功备份 ${successCount} 个 Git 镜像（${formatBytes(totalBytes)}）${failedMsg}`
+            : `Backed up ${successCount} Git mirrors (${formatBytes(totalBytes)})${failedMsg}`,
+            failedRepos.length > 0 ? 'error' : 'success'
+          );
+          break;
         }
 
         case 'ai-summary': {

@@ -31,14 +31,15 @@ export const UpdateChecker: React.FC<UpdateCheckerProps> = ({ onUpdateAvailable 
         setShowUpdateDialog(true);
         onUpdateAvailable?.(result.latestVersion);
         
-        // 设置全局更新通知
-        setUpdateNotification({
-          version: result.latestVersion.number,
-          releaseDate: result.latestVersion.releaseDate,
-          changelog: result.latestVersion.changelog,
-          downloadUrl: result.latestVersion.downloadUrl,
-          dismissed: false
-        });
+        if (UpdateService.isUpdateBannerEnabled()) {
+          setUpdateNotification({
+            version: result.latestVersion.number,
+            releaseDate: result.latestVersion.releaseDate,
+            changelog: result.latestVersion.changelog,
+            downloadUrl: result.latestVersion.downloadUrl,
+            dismissed: false
+          });
+        }
       } else if (!silent) {
         // 只在手动检查时显示"已是最新版本"的消息
         toast(t('当前已是最新版本！', 'You are already using the latest version!'), 'info');
@@ -175,20 +176,26 @@ export const useAutoUpdateCheck = () => {
   const { setUpdateNotification } = useAppStore();
   
   React.useEffect(() => {
+    if (!UpdateService.isAutoUpdateCheckEnabled()) {
+      setUpdateNotification(null);
+      return;
+    }
+
     const checkUpdatesOnStartup = async () => {
       try {
         const result = await UpdateService.checkForUpdates();
         if (result.hasUpdate && result.latestVersion) {
           console.log('New version available:', result.latestVersion.number);
           
-          // 设置全局更新通知
-          setUpdateNotification({
-            version: result.latestVersion.number,
-            releaseDate: result.latestVersion.releaseDate,
-            changelog: result.latestVersion.changelog,
-            downloadUrl: result.latestVersion.downloadUrl,
-            dismissed: false
-          });
+          if (UpdateService.isUpdateBannerEnabled()) {
+            setUpdateNotification({
+              version: result.latestVersion.number,
+              releaseDate: result.latestVersion.releaseDate,
+              changelog: result.latestVersion.changelog,
+              downloadUrl: result.latestVersion.downloadUrl,
+              dismissed: false
+            });
+          }
         }
       } catch (error) {
         console.error('Startup update check failed:', error);

@@ -79,7 +79,24 @@ export class WebDAVService {
 
   private getFullPath(filename: string): string {
     const basePath = this.config.path.endsWith('/') ? this.config.path : `${this.config.path}/`;
-    return `${this.config.url}${basePath}${filename}`;
+    const relativePath = filename.replace(/^\/+/, '');
+    return `${this.config.url}${basePath}${relativePath}`;
+  }
+
+  private getDirectorySegments(relativePath = ''): string[] {
+    const baseSegments = this.config.path.split('/').filter(Boolean);
+    const relativeSegments = relativePath
+      .replace(/^\/+/, '')
+      .split('/')
+      .filter(Boolean);
+
+    if (relativeSegments.length > 1) {
+      relativeSegments.pop();
+    } else {
+      relativeSegments.length = 0;
+    }
+
+    return [...baseSegments, ...relativeSegments];
   }
 
   private handleNetworkError(error: unknown, operation: string): never {
@@ -195,7 +212,7 @@ export class WebDAVService {
       console.log(`文件大小: ${fileAnalysis.sizeKB}KB，压缩后: ${Math.round(compressedContent.length / 1024)}KB`);
 
       // 确保目录存在
-      await this.ensureDirectoryExists();
+      await this.ensureDirectoryExists(filename);
 
       // 动态计算超时时间：基于压缩后文件大小，最小60秒，最大300秒
       const finalSizeKB = Math.round(compressedContent.length / 1024);
@@ -263,15 +280,14 @@ export class WebDAVService {
     }
   }
 
-  private async ensureDirectoryExists(): Promise<void> {
+  private async ensureDirectoryExists(relativePath = ''): Promise<void> {
     try {
-      if (!this.config.path || this.config.path === '/') {
+      if ((!this.config.path || this.config.path === '/') && !relativePath.includes('/')) {
         return; // 根目录总是存在
       }
 
       // 逐级创建目录，避免服务器因中间目录不存在而返回 409/403
-      const cleanedPath = this.config.path.replace(/\/+$/, ''); // 去掉末尾斜杠
-      const segments = cleanedPath.split('/').filter(Boolean); // 去掉空段
+      const segments = this.getDirectorySegments(relativePath);
       let currentPath = '';
 
       for (const seg of segments) {
@@ -299,6 +315,78 @@ export class WebDAVService {
     } catch (error) {
       console.warn('目录创建检查失败:', error);
       // 不在这里抛出错误，因为目录可能已经存在
+    }
+  }
+
+  async uploadBlob(filename: string, blob: Blob, contentType = 'application/octet-stream'): Promise<boolean> {
+    try {
+      if (!this.config.url.startsWith('http://') && !this.config.url.startsWith('https://')) {
+        throw new Error('WebDAV URL必须以 http:// 或 https:// 开头');
+      }
+
+      await this.ensureDirectoryExists(filename);
+
+      const sizeKB = Math.max(1, Math.round(blob.size / 1024));
+      const dynamicTimeout = Math.max(60000, Math.min(1800000, sizeKB * 200));
+
+      const uploadOperation = async (): Promise<boolean> => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), dynamicTimeout);
+
+        try {
+          const response = await fetch(this.getFullPath(filename), {
+            method: 'PUT',
+            headers: {
+              'Authorization': this.getAuthHeader(),
+              'Content-Type': contentType,
+            },
+            body: blob,
+            signal: controller.signal,
+          });
+
+          clearTimeout(timeoutId);
+
+          if (!response.ok) {
+            if (response.status === 401) {
+              throw new Error('身份验证失败。请检查用户名和密码。');
+            }
+            if (response.status === 403) {
+              throw new Error('访问被拒绝。请检查指定路径的权限。');
+            }
+            if (response.status === 404) {
+              throw new Error('路径未找到。请验证WebDAV URL和路径是否正确。');
+            }
+            if (response.status === 507) {
+              throw new Error('服务器存储空间不足。');
+            }
+            throw new Error(`上传失败，HTTP状态码 ${response.status}: ${response.statusText}`);
+          }
+
+          return true;
+        } catch (fetchError: unknown) {
+          clearTimeout(timeoutId);
+
+          if ((fetchError as Error).name === 'AbortError') {
+            throw new Error(`上传超时 (${sizeKB}KB文件，${Math.round(dynamicTimeout / 1000)}秒限制)。请检查网络连接或WebDAV服务器。`);
+          }
+
+          throw fetchError;
+        }
+      };
+
+      return await this.retryUpload(uploadOperation, 2, 2000);
+    } catch (error: unknown) {
+      const err = error as Error;
+      if (err.message.includes('身份验证失败') ||
+          err.message.includes('访问被拒绝') ||
+          err.message.includes('路径未找到') ||
+          err.message.includes('存储空间不足') ||
+          err.message.includes('上传失败，HTTP状态码') ||
+          err.message.includes('上传超时') ||
+          err.message.includes('WebDAV URL必须')) {
+        throw error;
+      }
+      return this.handleNetworkError(error, '上传');
     }
   }
 

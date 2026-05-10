@@ -111,8 +111,9 @@ router.post('/api/sync/import', (req, res) => {
             owner_login, owner_avatar_url, topics,
             ai_summary, ai_tags, ai_platforms, analyzed_at, analysis_failed,
             custom_description, custom_tags, custom_category, category_locked, last_edited,
-            subscribed_to_releases
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            subscribed_to_releases, archive_backed_up_at, archive_backup_path, archive_backup_size,
+            mirror_backed_up_at, mirror_backup_path, mirror_backup_size
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
         for (const r of repos) {
           // 验证必需的字段
@@ -134,7 +135,13 @@ router.post('/api/sync/import', (req, res) => {
             r.custom_description ?? null,
             typeof r.custom_tags === 'string' ? r.custom_tags : JSON.stringify(r.custom_tags ?? []),
             r.custom_category ?? null, (r.category_locked === true || r.category_locked === 1) ? 1 : 0, r.last_edited ?? null,
-            r.subscribed_to_releases ? 1 : 0
+            r.subscribed_to_releases ? 1 : 0,
+            r.archive_backed_up_at ?? null,
+            r.archive_backup_path ?? null,
+            typeof r.archive_backup_size === 'number' ? r.archive_backup_size : null,
+            r.mirror_backed_up_at ?? null,
+            r.mirror_backup_path ?? null,
+            typeof r.mirror_backup_size === 'number' ? r.mirror_backup_size : null
           );
         }
         counts.repositories = repos.length;

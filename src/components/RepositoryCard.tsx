@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { GripVertical, Star, StarOff, ExternalLink, Calendar, Bell, BellOff, Bot, Sparkles, Monitor, Smartphone, Globe, Terminal, Package, Edit3, BookOpen, Apple, Square, CheckSquare, Loader2 } from 'lucide-react';
+import { GripVertical, Star, StarOff, ExternalLink, Calendar, Bell, BellOff, Bot, Sparkles, Monitor, Smartphone, Globe, Terminal, Package, Edit3, BookOpen, Apple, Square, CheckSquare, Loader2, UploadCloud, FileArchive } from 'lucide-react';
 import { Repository, Category } from '../types';
 import { useAppStore } from '../store/useAppStore';
 import { getAICategory, getDefaultCategory } from '../utils/categoryUtils';
@@ -12,6 +12,8 @@ import { RepositoryEditModal } from './RepositoryEditModal';
 import { ReadmeModal } from './ReadmeModal';
 import { shallow } from 'zustand/shallow';
 import { useDialog } from '../hooks/useDialog';
+import { backupRepositoryArchive, formatBytes } from '../services/repositoryBackupService';
+import { backend } from '../services/backendAdapter';
 
 // Selection-aware button component to centralize selectionMode disable logic
 interface SelectionAwareButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -95,6 +97,8 @@ const RepositoryCardComponent: React.FC<RepositoryCardProps> = ({
     githubToken,
     activeAIConfig,
     analyzingRepositoryIds,
+    webdavConfigs,
+    activeWebDAVConfig,
     setAnalyzingRepository,
     language,
     updateRepository,
@@ -107,6 +111,8 @@ const RepositoryCardComponent: React.FC<RepositoryCardProps> = ({
         githubToken: state.githubToken,
         activeAIConfig: state.activeAIConfig,
         analyzingRepositoryIds: state.analyzingRepositoryIds,
+        webdavConfigs: state.webdavConfigs,
+        activeWebDAVConfig: state.activeWebDAVConfig,
         setAnalyzingRepository: state.setAnalyzingRepository,
         language: state.language,
         updateRepository: state.updateRepository,
@@ -141,6 +147,8 @@ const RepositoryCardComponent: React.FC<RepositoryCardProps> = ({
   const [showTooltip, setShowTooltip] = useState(false);
   const [isTextTruncated, setIsTextTruncated] = useState(false);
   const [unstarring, setUnstarring] = useState(false);
+  const [isBackingUpArchive, setIsBackingUpArchive] = useState(false);
+  const [isBackingUpMirror, setIsBackingUpMirror] = useState(false);
   const [showDragHint, setShowDragHint] = useState(false);
   const dragHintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -564,6 +572,108 @@ const RepositoryCardComponent: React.FC<RepositoryCardProps> = ({
     }
   };
 
+  const handleArchiveBackup = async () => {
+    const activeWebDAV = webdavConfigs.find(config => config.id === activeWebDAVConfig);
+    if (!activeWebDAV) {
+      toast(t('请先在设置中配置并激活 WebDAV。', 'Please configure and activate WebDAV in settings first.'), 'error');
+      return;
+    }
+
+    if (activeWebDAV.passwordStatus === 'decrypt_failed' || activeWebDAV.passwordStatus === 'empty') {
+      toast(t('WebDAV 密码无法解密或为空，请重新保存配置。', 'The WebDAV password could not be decrypted or is empty. Please save the configuration again.'), 'error');
+      return;
+    }
+
+    const confirmed = await confirm(
+      t('备份源码归档', 'Back Up Source Archive'),
+      t(
+        `将下载 "${repository.full_name}" 当前源码压缩包并上传到 WebDAV。是否继续？`,
+        `Download the current source archive for "${repository.full_name}" and upload it to WebDAV. Continue?`
+      ),
+      { type: 'warning' }
+    );
+    if (!confirmed) return;
+
+    setIsBackingUpArchive(true);
+    try {
+      const result = await backupRepositoryArchive({
+        repository,
+        githubToken,
+        webdavConfig: activeWebDAV,
+      });
+
+      updateRepository({
+        ...repository,
+        archive_backed_up_at: result.archivedAt,
+        archive_backup_path: result.archivePath,
+        archive_backup_size: result.size,
+      });
+      await forceSyncToBackend();
+
+      toast(t(
+        `源码备份完成：${formatBytes(result.size)}`,
+        `Source archive backed up: ${formatBytes(result.size)}`
+      ), 'success');
+    } catch (error) {
+      console.error('Repository archive backup failed:', error);
+      toast(`${t('源码备份失败', 'Source archive backup failed')}: ${(error as Error).message}`, 'error');
+    } finally {
+      setIsBackingUpArchive(false);
+    }
+  };
+
+  const handleMirrorBackup = async () => {
+    const activeWebDAV = webdavConfigs.find(config => config.id === activeWebDAVConfig);
+    if (!activeWebDAV) {
+      toast(t('请先在设置中配置并激活 WebDAV。', 'Please configure and activate WebDAV in settings first.'), 'error');
+      return;
+    }
+
+    if (activeWebDAV.passwordStatus === 'decrypt_failed' || activeWebDAV.passwordStatus === 'empty') {
+      toast(t('WebDAV 密码无法解密或为空，请重新保存配置。', 'The WebDAV password could not be decrypted or is empty. Please save the configuration again.'), 'error');
+      return;
+    }
+
+    if (!backend.isAvailable) {
+      toast(t('完整 Git 镜像备份需要启用后端服务。', 'Full Git mirror backup requires the backend service.'), 'error');
+      return;
+    }
+
+    const confirmed = await confirm(
+      t('完整 Git 镜像备份', 'Full Git Mirror Backup'),
+      t(
+        `将备份 "${repository.full_name}" 的完整 Git 历史、分支和标签，并上传到 WebDAV。此操作可能耗时较久。是否继续？`,
+        `Back up the full Git history, branches, and tags for "${repository.full_name}" to WebDAV. This may take a while. Continue?`
+      ),
+      { type: 'warning' }
+    );
+    if (!confirmed) return;
+
+    setIsBackingUpMirror(true);
+    try {
+      await backend.syncWebDAVConfigs(webdavConfigs);
+      await backend.syncSettings({ activeWebDAVConfig });
+      const result = await backend.backupRepositoryMirror(repository, activeWebDAV.id, githubToken);
+      updateRepository({
+        ...repository,
+        mirror_backed_up_at: result.backedUpAt,
+        mirror_backup_path: result.mirrorPath,
+        mirror_backup_size: result.size,
+      });
+      await forceSyncToBackend();
+
+      toast(t(
+        `Git 镜像备份完成：${formatBytes(result.size)}`,
+        `Git mirror backed up: ${formatBytes(result.size)}`
+      ), 'success');
+    } catch (error) {
+      console.error('Repository mirror backup failed:', error);
+      toast(`${t('Git 镜像备份失败', 'Git mirror backup failed')}: ${(error as Error).message}`, 'error');
+    } finally {
+      setIsBackingUpMirror(false);
+    }
+  };
+
   const dragStartPosRef = useRef<{ x: number; y: number } | null>(null);
   const isDraggingRef = useRef(false);
   const dragHandleRef = useRef<HTMLDivElement>(null);
@@ -868,6 +978,28 @@ const RepositoryCardComponent: React.FC<RepositoryCardProps> = ({
           >
             <BookOpen className="w-4 h-4" />
           </a>
+          <SelectionAwareButton
+            onClick={handleArchiveBackup}
+            disabled={isBackingUpArchive}
+            selectionMode={selectionMode}
+            className="flex items-center justify-center w-8 h-8 bg-gray-100 text-gray-700 hover:bg-gray-200 hover:text-gray-900 dark:bg-white/[0.04] dark:text-text-secondary dark:hover:bg-white/[0.08] dark:hover:text-text-primary"
+            title={repository.archive_backed_up_at
+              ? t(`上次源码备份：${new Date(repository.archive_backed_up_at).toLocaleString()}`, `Last source backup: ${new Date(repository.archive_backed_up_at).toLocaleString()}`)
+              : t('备份源码到 WebDAV', 'Back up source to WebDAV')}
+          >
+            {isBackingUpArchive ? <Loader2 className="w-4 h-4 animate-spin" /> : <UploadCloud className="w-4 h-4" />}
+          </SelectionAwareButton>
+          <SelectionAwareButton
+            onClick={handleMirrorBackup}
+            disabled={isBackingUpMirror}
+            selectionMode={selectionMode}
+            className="flex items-center justify-center w-8 h-8 bg-gray-100 text-gray-700 hover:bg-gray-200 hover:text-gray-900 dark:bg-white/[0.04] dark:text-text-secondary dark:hover:bg-white/[0.08] dark:hover:text-text-primary"
+            title={repository.mirror_backed_up_at
+              ? t(`上次 Git 镜像备份：${new Date(repository.mirror_backed_up_at).toLocaleString()}`, `Last Git mirror backup: ${new Date(repository.mirror_backed_up_at).toLocaleString()}`)
+              : t('完整 Git 镜像备份', 'Full Git mirror backup')}
+          >
+            {isBackingUpMirror ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileArchive className="w-4 h-4" />}
+          </SelectionAwareButton>
           <a
             href={repository.html_url}
             target="_blank"
@@ -940,6 +1072,24 @@ const RepositoryCardComponent: React.FC<RepositoryCardProps> = ({
               <span>{language === 'zh' ? 'AI已分析' : 'AI Analyzed'}</span>
             </div>
           ) : null}
+          {repository.archive_backed_up_at && (
+            <div
+              className="flex items-center space-x-1 text-xs text-gray-700 dark:text-text-secondary"
+              title={repository.archive_backup_path || ''}
+            >
+              <UploadCloud className="w-3 h-3" />
+              <span>{language === 'zh' ? '已备份' : 'Backed up'}</span>
+            </div>
+          )}
+          {repository.mirror_backed_up_at && (
+            <div
+              className="flex items-center space-x-1 text-xs text-gray-700 dark:text-text-secondary"
+              title={repository.mirror_backup_path || ''}
+            >
+              <FileArchive className="w-3 h-3" />
+              <span>{language === 'zh' ? '镜像已备份' : 'Mirror backed up'}</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1083,6 +1233,12 @@ export const RepositoryCard = React.memo(RepositoryCardComponent, (prevProps, ne
     prevProps.repository.stargazers_count === nextProps.repository.stargazers_count &&
     prevProps.repository.pushed_at === nextProps.repository.pushed_at &&
     prevProps.repository.updated_at === nextProps.repository.updated_at &&
+    prevProps.repository.archive_backed_up_at === nextProps.repository.archive_backed_up_at &&
+    prevProps.repository.archive_backup_path === nextProps.repository.archive_backup_path &&
+    prevProps.repository.archive_backup_size === nextProps.repository.archive_backup_size &&
+    prevProps.repository.mirror_backed_up_at === nextProps.repository.mirror_backed_up_at &&
+    prevProps.repository.mirror_backup_path === nextProps.repository.mirror_backup_path &&
+    prevProps.repository.mirror_backup_size === nextProps.repository.mirror_backup_size &&
     prevProps.showAISummary === nextProps.showAISummary &&
     prevProps.searchQuery === nextProps.searchQuery &&
     prevProps.isSelected === nextProps.isSelected &&

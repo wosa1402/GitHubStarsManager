@@ -824,6 +824,12 @@ export const useAppStore = create<AppState & AppActions>()(
             category_locked: updatedRepositories[existingRepoIndex].category_locked,
             last_edited: updatedRepositories[existingRepoIndex].last_edited,
             subscribed_to_releases: updatedRepositories[existingRepoIndex].subscribed_to_releases,
+            archive_backed_up_at: updatedRepositories[existingRepoIndex].archive_backed_up_at,
+            archive_backup_path: updatedRepositories[existingRepoIndex].archive_backup_path,
+            archive_backup_size: updatedRepositories[existingRepoIndex].archive_backup_size,
+            mirror_backed_up_at: updatedRepositories[existingRepoIndex].mirror_backed_up_at,
+            mirror_backup_path: updatedRepositories[existingRepoIndex].mirror_backup_path,
+            mirror_backup_size: updatedRepositories[existingRepoIndex].mirror_backup_size,
           };
         } else {
           // 如果不存在，添加新仓库（生成新ID）

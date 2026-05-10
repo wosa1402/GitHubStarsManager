@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3';
 
-function addColumnIfMissing(db: Database.Database, table: string, column: string, definition: string): void {
+export function addColumnIfMissing(db: Database.Database, table: string, column: string, definition: string): void {
   const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
   if (!columns.some((col) => col.name === column)) {
     db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
@@ -40,7 +40,13 @@ export function initializeSchema(db: Database.Database): void {
       custom_category TEXT,
       category_locked INTEGER DEFAULT 0,
       last_edited TEXT,
-      subscribed_to_releases INTEGER DEFAULT 0
+      subscribed_to_releases INTEGER DEFAULT 0,
+      archive_backed_up_at TEXT,
+      archive_backup_path TEXT,
+      archive_backup_size INTEGER,
+      mirror_backed_up_at TEXT,
+      mirror_backup_path TEXT,
+      mirror_backup_size INTEGER
     );
 
     CREATE TABLE IF NOT EXISTS releases (
@@ -112,6 +118,12 @@ export function initializeSchema(db: Database.Database): void {
   addColumnIfMissing(db, 'ai_configs', 'reasoning_effort', 'TEXT');
   addColumnIfMissing(db, 'repositories', 'category_locked', 'INTEGER DEFAULT 0');
   addColumnIfMissing(db, 'repositories', 'star_sources', 'TEXT');
+  addColumnIfMissing(db, 'repositories', 'archive_backed_up_at', 'TEXT');
+  addColumnIfMissing(db, 'repositories', 'archive_backup_path', 'TEXT');
+  addColumnIfMissing(db, 'repositories', 'archive_backup_size', 'INTEGER');
+  addColumnIfMissing(db, 'repositories', 'mirror_backed_up_at', 'TEXT');
+  addColumnIfMissing(db, 'repositories', 'mirror_backup_path', 'TEXT');
+  addColumnIfMissing(db, 'repositories', 'mirror_backup_size', 'INTEGER');
   addColumnIfMissing(db, 'releases', 'zipball_url', 'TEXT');
   addColumnIfMissing(db, 'releases', 'tarball_url', 'TEXT');
   addColumnIfMissing(db, 'categories', 'description', 'TEXT');

@@ -1,5 +1,8 @@
 import { Router } from 'express';
 import { getDb } from '../db/connection.js';
+import { config } from '../config.js';
+import { decrypt } from '../services/crypto.js';
+import { backupRepositoryMirror } from '../services/repositoryMirrorBackup.js';
 
 const router = Router();
 
@@ -40,6 +43,12 @@ function transformRepo(row: Record<string, unknown>) {
     category_locked: !!row.category_locked,
     last_edited: row.last_edited,
     subscribed_to_releases: !!row.subscribed_to_releases,
+    archive_backed_up_at: row.archive_backed_up_at ?? undefined,
+    archive_backup_path: row.archive_backup_path ?? undefined,
+    archive_backup_size: row.archive_backup_size ?? undefined,
+    mirror_backed_up_at: row.mirror_backed_up_at ?? undefined,
+    mirror_backup_path: row.mirror_backup_path ?? undefined,
+    mirror_backup_size: row.mirror_backup_size ?? undefined,
   };
 }
 
@@ -127,8 +136,9 @@ router.put('/api/repositories', (req, res) => {
         owner_login, owner_avatar_url, topics,
         ai_summary, ai_tags, ai_platforms, analyzed_at, analysis_failed,
         custom_description, custom_tags, custom_category, category_locked, last_edited,
-        subscribed_to_releases
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        subscribed_to_releases, archive_backed_up_at, archive_backup_path, archive_backup_size,
+        mirror_backed_up_at, mirror_backup_path, mirror_backup_size
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const deleteAllReleases = db.prepare('DELETE FROM releases');
@@ -175,7 +185,13 @@ router.put('/api/repositories', (req, res) => {
           repo.custom_description ?? null,
           JSON.stringify(Array.isArray(repo.custom_tags) ? repo.custom_tags : []),
           repo.custom_category ?? null, (repo.category_locked === true || repo.category_locked === 1) ? 1 : 0, repo.last_edited ?? null,
-          (repo.subscribed_to_releases === true || repo.subscribed_to_releases === 1) ? 1 : 0
+          (repo.subscribed_to_releases === true || repo.subscribed_to_releases === 1) ? 1 : 0,
+          repo.archive_backed_up_at ?? null,
+          repo.archive_backup_path ?? null,
+          typeof repo.archive_backup_size === 'number' ? repo.archive_backup_size : null,
+          repo.mirror_backed_up_at ?? null,
+          repo.mirror_backup_path ?? null,
+          typeof repo.mirror_backup_size === 'number' ? repo.mirror_backup_size : null
         );
         count++;
       }
@@ -212,6 +228,12 @@ router.patch('/api/repositories/:id', (req, res) => {
       description: (v) => v,
       name: (v) => v,
       star_sources: (v) => JSON.stringify(Array.isArray(v) ? v : []),
+      archive_backed_up_at: (v) => v,
+      archive_backup_path: (v) => v,
+      archive_backup_size: (v) => typeof v === 'number' ? v : null,
+      mirror_backed_up_at: (v) => v,
+      mirror_backup_path: (v) => v,
+      mirror_backup_size: (v) => typeof v === 'number' ? v : null,
     };
 
     const setClauses: string[] = [];
@@ -241,6 +263,91 @@ router.patch('/api/repositories/:id', (req, res) => {
   } catch (err) {
     console.error('PATCH /api/repositories error:', err);
     res.status(500).json({ error: 'Failed to update repository', code: 'UPDATE_REPOSITORY_FAILED' });
+  }
+});
+
+// POST /api/repositories/mirror-backup
+router.post('/api/repositories/mirror-backup', async (req, res) => {
+  try {
+    const db = getDb();
+    const { repository, webdavConfigId } = req.body as {
+      repository?: Record<string, unknown>;
+      webdavConfigId?: string;
+      githubToken?: string | null;
+    };
+
+    if (!repository || typeof repository.full_name !== 'string') {
+      res.status(400).json({ error: 'repository with full_name required', code: 'REPOSITORY_REQUIRED' });
+      return;
+    }
+    if (!webdavConfigId) {
+      res.status(400).json({ error: 'webdavConfigId required', code: 'WEBDAV_CONFIG_ID_REQUIRED' });
+      return;
+    }
+
+    const webdavRow = db.prepare('SELECT * FROM webdav_configs WHERE id = ?').get(webdavConfigId) as Record<string, unknown> | undefined;
+    if (!webdavRow) {
+      res.status(404).json({ error: 'WebDAV config not found', code: 'WEBDAV_CONFIG_NOT_FOUND' });
+      return;
+    }
+
+    let webdavPassword: string;
+    try {
+      webdavPassword = decrypt(webdavRow.password_encrypted as string, config.encryptionKey);
+    } catch {
+      res.status(500).json({ error: 'Failed to decrypt WebDAV password', code: 'WEBDAV_PASSWORD_DECRYPT_FAILED' });
+      return;
+    }
+
+    let githubToken: string | null = typeof req.body.githubToken === 'string' && req.body.githubToken.trim()
+      ? req.body.githubToken.trim()
+      : null;
+
+    const tokenRow = !githubToken
+      ? db.prepare('SELECT value FROM settings WHERE key = ?').get('github_token') as { value: string } | undefined
+      : undefined;
+    if (!githubToken && tokenRow?.value) {
+      try {
+        githubToken = decrypt(tokenRow.value, config.encryptionKey);
+      } catch {
+        res.status(500).json({ error: 'Failed to decrypt GitHub token', code: 'GITHUB_TOKEN_DECRYPT_FAILED' });
+        return;
+      }
+    }
+
+    const result = await backupRepositoryMirror({
+      repository: {
+        id: typeof repository.id === 'number' ? repository.id : undefined,
+        full_name: repository.full_name,
+        name: typeof repository.name === 'string' ? repository.name : undefined,
+        html_url: typeof repository.html_url === 'string' ? repository.html_url : undefined,
+        description: typeof repository.description === 'string' ? repository.description : null,
+        language: typeof repository.language === 'string' ? repository.language : null,
+        stargazers_count: typeof repository.stargazers_count === 'number' ? repository.stargazers_count : undefined,
+        pushed_at: typeof repository.pushed_at === 'string' ? repository.pushed_at : undefined,
+      },
+      githubToken,
+      webdavConfig: {
+        url: webdavRow.url as string,
+        username: webdavRow.username as string,
+        password: webdavPassword,
+        path: webdavRow.path as string,
+      },
+    });
+
+    if (typeof repository.id === 'number') {
+      db.prepare(`
+        UPDATE repositories
+        SET mirror_backed_up_at = ?, mirror_backup_path = ?, mirror_backup_size = ?
+        WHERE id = ?
+      `).run(result.backedUpAt, result.mirrorPath, result.size, repository.id);
+    }
+
+    res.json(result);
+  } catch (err) {
+    console.error('POST /api/repositories/mirror-backup error:', err);
+    const message = err instanceof Error ? err.message : 'Failed to back up repository mirror';
+    res.status(500).json({ error: message, code: 'MIRROR_BACKUP_FAILED' });
   }
 });
 

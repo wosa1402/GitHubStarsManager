@@ -8,7 +8,7 @@ RUN npm run build && npm prune --omit=dev
 
 FROM node:22-alpine
 WORKDIR /app
-RUN apk add --no-cache libstdc++
+RUN apk add --no-cache libstdc++ git
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/package.json ./
